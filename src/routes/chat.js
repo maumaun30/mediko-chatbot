@@ -83,7 +83,14 @@ export default async function chatRoutes(fastify) {
 
     const send = (data) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
 
-    // ── 4. Handle handoff cases ──────────────────────────────
+    // ── 4. Handle off-topic, handoff, and agent cases ──────────
+    if (decision.type === 'off_topic') {
+      send({ type: 'chunk', text: decision.replyText })
+      send({ type: 'done', tokens: 0 })
+      reply.raw.end()
+      return
+    }
+
     if (decision.type === 'handoff_requested') {
       send({ type: 'handoff', message: 'Sandali lang po. Ikinokonekta ko kayo sa aming team. Maaaring may ilang minuto bago sumagot ang ahente.' })
       reply.raw.end()

@@ -155,6 +155,10 @@ async function handleInboundMessage(msg, log) {
       log.info({ sessionId, channel }, 'Session returned to AI')
       break
 
+    case 'off_topic':
+      await dispatchReply(channel, channelUserId, decision.replyText)
+      break
+
     case 'ai': {
       // ── 2. Show typing indicator ─────────────────────────
       await sendTypingIndicator(channel, channelUserId)
