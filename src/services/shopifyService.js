@@ -180,23 +180,64 @@ export async function searchProducts(query, limit = 3) {
 }
 
 /**
- * Given a raw customer message, extract health keywords and search Shopify.
- * Returns up to 3 relevant products, or [] if no keywords detected.
+ * Product-browse triggers — messages asking to see the catalog broadly.
+ * These bypass the health keyword map and fetch top products instead.
+ */
+const BROWSE_PATTERNS = [
+  /\b(anong|ano ang|ipakita|show|list|pakita|lahat|all|catalog|products?|supplements?|available|meron|mayroon|may)\b.{0,40}\b(products?|supplements?|items?|available|nyo|ninyo|kayo|store|shop)\b/i,
+  /\b(what|what's|whats).{0,20}\b(available|you have|do you (have|sell|carry|offer))\b/i,
+  /\b(products?|supplements?|vitamins?|items?)\s+(nyo|ninyo|ng mediko|available|mo|ba)/i,
+  /\b(browse|explore|tingnan|tumingin|gusto kong makita)\b/i,
+]
+
+/**
+ * Returns true if the message is asking to browse/list products generally.
+ * @param {string} message
+ * @returns {boolean}
+ */
+function isBrowseRequest(message) {
+  return BROWSE_PATTERNS.some(p => p.test(message))
+}
+
+/**
+ * Given a raw customer message, search Shopify for relevant products.
+ *
+ * Strategy:
+ *   1. If health keywords detected → search by those keywords
+ *   2. If browse/catalog request detected → fetch top products broadly
+ *   3. If specific product name mentioned → search by that name
+ *   4. Otherwise → return [] (no context injected, Medi answers generally)
  *
  * @param {string} message
  * @returns {Promise<ShopifyProduct[]>}
  */
 export async function getProductContextForMessage(message) {
-  const keywords = extractSearchKeywords(message)
-  if (!keywords.length) return []
-
-  // Build a Shopify search query from the extracted keywords
-  const query = keywords.slice(0, 4).join(' OR ')
-
   try {
-    return await searchProducts(query, 3)
+    // Strategy 1: health keyword match
+    const keywords = extractSearchKeywords(message)
+    if (keywords.length) {
+      const query = keywords.slice(0, 4).join(' OR ')
+      const results = await searchProducts(query, 3)
+      if (results.length) return results
+    }
+
+    // Strategy 2: browse/catalog request — fetch top products
+    if (isBrowseRequest(message)) {
+      return await searchProducts('*', 5)
+    }
+
+    // Strategy 3: looks like a specific product name (3+ char capitalised words)
+    const productWords = message.match(/\b[A-Za-z][a-zA-Z]{2,}\b/g) || []
+    const filtered = productWords
+      .filter(w => !'the a an is are was were be been have has had do does did will would could should may might must shall can po ba ang ng mga sa'.split(' ').includes(w.toLowerCase()))
+    if (filtered.length) {
+      const nameQuery = filtered.slice(0, 3).join(' ')
+      const results = await searchProducts(nameQuery, 3)
+      if (results.length) return results
+    }
+
+    return []
   } catch (err) {
-    // Non-fatal — if Shopify is unavailable, Medi just won't have product context
     console.error('[shopifyService] Product search failed:', err.message)
     return []
   }

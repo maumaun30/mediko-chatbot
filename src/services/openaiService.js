@@ -7,7 +7,7 @@ if (!process.env.OPENAI_API_KEY) {
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 const MODEL       = process.env.OPENAI_MODEL       || 'gpt-4o'
-const MAX_TOKENS  = parseInt(process.env.OPENAI_MAX_TOKENS  || '4096', 10)
+const MAX_TOKENS  = parseInt(process.env.OPENAI_MAX_TOKENS  || '600', 10)
 const TEMPERATURE = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7')
 
 /**

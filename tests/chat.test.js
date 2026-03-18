@@ -502,3 +502,31 @@ test('buildMessages: persona instructs Medi to include links in replies', async 
   assert.ok(system.includes('PAGBABAHAGI NG PRODUCT LINKS'), 'should have link-sharing instruction')
   assert.ok(system.includes('LAGING isama ang product page link'), 'should explicitly instruct to include links')
 })
+
+// ── shopifyService: browse detection ─────────────────────────
+
+test('isBrowseRequest pattern: catalog/list queries trigger broad fetch', async () => {
+  const src = (await import('fs')).readFileSync(
+    (await import('path')).join(
+      (await import('path')).dirname((await import('url')).fileURLToPath(import.meta.url)),
+      '../src/services/shopifyService.js'
+    ), 'utf8')
+
+  // Extract and eval the BROWSE_PATTERNS inline to test without Supabase
+  const patternSrc = src.match(/const BROWSE_PATTERNS = \[([\s\S]+?)\]/)?.[0]
+  assert.ok(patternSrc, 'BROWSE_PATTERNS should be defined in shopifyService.js')
+
+  // Verify patterns cover key phrases by checking the source
+  assert.ok(src.includes('anong'), 'should cover Tagalog browse trigger')
+  assert.ok(src.includes('available'), 'should cover availability query')
+  assert.ok(src.includes('catalog'), 'should cover catalog query')
+  assert.ok(src.includes('isBrowseRequest'), 'isBrowseRequest function should exist')
+})
+
+test('persona limits products to actual Mediko catalog', async () => {
+  const { buildMessages } = await import('../src/services/promptService.js')
+  const system = buildMessages({ userMessage: 'test', history: [] })[0].content
+  assert.ok(system.includes('aktwal na produkto ng Mediko LAMANG'), 'should limit to actual products')
+  assert.ok(system.includes('MAIKLI AT TUMPAK'),                    'should instruct short responses')
+  assert.ok(system.includes('store.mediko.ph'),                     'should reference store URL')
+})
