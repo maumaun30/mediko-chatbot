@@ -5,6 +5,7 @@ import chatRoutes             from './routes/chat.js'
 import webhookRoutes          from './routes/webhooks.js'
 import productRoutes          from './routes/products.js'
 import adminRoutes            from './routes/admin.js'
+import keywordRoutes          from './routes/keywords.js'
 import dashboardRoutes        from './routes/dashboard.js'
 import { setupAgentWebSocket } from './services/agentService.js'
 import staticPlugin          from './plugins/static.js'
@@ -37,6 +38,7 @@ await fastify.register(chatRoutes,      { prefix: '/api/chat' })
 await fastify.register(webhookRoutes,   { prefix: '/api/webhooks' })
 await fastify.register(productRoutes,   { prefix: '/api/products' })
 await fastify.register(adminRoutes,     { prefix: '/api/admin' })
+await fastify.register(keywordRoutes,   { prefix: '/api/keywords' })
 await fastify.register(dashboardRoutes)
 
 // Meta setup routes — dev only

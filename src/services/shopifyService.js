@@ -1,94 +1,32 @@
 /**
  * shopifyService.js
  *
- * Two responsibilities:
- *   1. Product search  — Shopify Storefront GraphQL API (public, free)
- *   2. Order lookup    — Shopify Admin REST API (private app token)
+ * Product search via Shopify Storefront GraphQL API.
+ * Order lookup via Shopify Admin REST API.
  *
- * All results are returned in a clean internal shape so the prompt
- * builder never has to deal with raw Shopify response structures.
+ * ── Required Shopify Storefront API scopes ───────────────────
+ * When creating your Storefront API token in Shopify Admin:
+ *   Apps → Develop Apps → [Your App] → API credentials
+ *   → Storefront API access scopes → enable:
+ *     ✓ unauthenticated_read_product_listings
+ *     ✓ unauthenticated_read_product_inventory
+ *     ✓ unauthenticated_read_selling_plans   (optional, for bundles)
+ *
+ * Without unauthenticated_read_product_listings the products query
+ * returns an empty array even with a valid token.
+ * ────────────────────────────────────────────────────────────
  */
 
-// ── Config ───────────────────────────────────────────────────
+import { loadKeywords } from './keywordService.js'
 
-const STORE_DOMAIN    = process.env.SHOPIFY_STORE_DOMAIN      // e.g. store.mediko.ph
-const STOREFRONT_TOKEN = process.env.SHOPIFY_STOREFRONT_TOKEN // public Storefront API token
-const ADMIN_TOKEN     = process.env.SHOPIFY_ADMIN_TOKEN       // private Admin API token
+const STORE_DOMAIN     = process.env.SHOPIFY_STORE_DOMAIN
+const STOREFRONT_TOKEN = process.env.SHOPIFY_STOREFRONT_TOKEN
+const ADMIN_TOKEN      = process.env.SHOPIFY_ADMIN_TOKEN
 
-const STOREFRONT_URL  = `https://${STORE_DOMAIN}/api/2024-01/graphql.json`
-const ADMIN_URL       = `https://${STORE_DOMAIN}/admin/api/2024-01`
+const STOREFRONT_URL   = `https://${STORE_DOMAIN}/api/2024-01/graphql.json`
+const ADMIN_URL        = `https://${STORE_DOMAIN}/admin/api/2024-01`
 
-// ── Keyword extraction ───────────────────────────────────────
-
-/**
- * Health-concern keyword map.
- * Maps common Tagalog/English health terms → Shopify search keywords.
- * This is the "smart" part: "hirap matulog" → searches "sleep melatonin".
- *
- * @type {Array<{ patterns: RegExp, keywords: string[] }>}
- */
-const HEALTH_KEYWORD_MAP = [
-  { patterns: /immune|immunity|imunan|resistensya|ubo|sipon|trangkaso|flu|cold/i,
-    keywords: ['immunity', 'vitamin c', 'zinc', 'elderberry'] },
-
-  { patterns: /tulog|sleep|insomnia|gising|di makatulog|hirap matulog/i,
-    keywords: ['sleep', 'melatonin', 'magnesium'] },
-
-  { patterns: /energy|lakas|pagod|obat|antok|tired|fatigue/i,
-    keywords: ['energy', 'b12', 'iron', 'multivitamin'] },
-
-  { patterns: /bones?|buto|osteoporosis|calcium|kaltsyum/i,
-    keywords: ['calcium', 'vitamin d', 'bone'] },
-
-  { patterns: /skin|balat|glow|acne|pimple|tagihawat|brightening/i,
-    keywords: ['collagen', 'vitamin e', 'skin', 'glutathione'] },
-
-  { patterns: /heart|puso|cholesterol|blood pressure|presyon/i,
-    keywords: ['omega 3', 'fish oil', 'coq10', 'heart'] },
-
-  { patterns: /digest|tiyan|stomach|constipation|semento|probiot/i,
-    keywords: ['probiotic', 'digestive', 'fiber', 'gut'] },
-
-  { patterns: /stress|kaba|anxiety|tension|relax/i,
-    keywords: ['ashwagandha', 'magnesium', 'stress', 'calm'] },
-
-  { patterns: /weight|timbang|slimming|diet|fat|payat/i,
-    keywords: ['weight', 'garcinia', 'cla', 'metabolism'] },
-
-  { patterns: /eyes?|mata|vision|sight/i,
-    keywords: ['lutein', 'vitamin a', 'eye'] },
-
-  { patterns: /pregnant|buntis|prenatal|folic|folate/i,
-    keywords: ['prenatal', 'folic acid', 'prenatal vitamin'] },
-
-  { patterns: /kids?|bata|children|pedia|child/i,
-    keywords: ['children', 'kids', 'gummies', 'pedia'] },
-]
-
-/**
- * Extract search keywords from a customer message.
- * Returns an array of keyword strings, deduplicated.
- *
- * @param {string} message
- * @returns {string[]}
- */
-export function extractSearchKeywords(message) {
-  const found = new Set()
-
-  for (const { patterns, keywords } of HEALTH_KEYWORD_MAP) {
-    if (patterns.test(message)) {
-      keywords.forEach(k => found.add(k))
-    }
-  }
-
-  // Also extract any explicit product-name mentions (capitalised words, 2+ chars)
-  const productMentions = message.match(/\b[A-Z][a-zA-Z]{2,}\b/g) || []
-  productMentions.forEach(w => found.add(w.toLowerCase()))
-
-  return [...found]
-}
-
-// ── Storefront GraphQL product search ────────────────────────
+// ── GraphQL query ─────────────────────────────────────────────
 
 const PRODUCT_SEARCH_QUERY = `
   query searchProducts($query: String!, $first: Int!) {
@@ -120,53 +58,55 @@ const PRODUCT_SEARCH_QUERY = `
   }
 `
 
-/**
- * @typedef {Object} ShopifyProduct
- * @property {string}   id
- * @property {string}   title
- * @property {string}   handle
- * @property {string}   description
- * @property {string[]} tags
- * @property {{ amount: string, currencyCode: string }} minPrice
- * @property {{ amount: string, currencyCode: string }} maxPrice
- * @property {Array<{ id: string, title: string, price: string, available: boolean }>} variants
- */
+// ── Shopify search ────────────────────────────────────────────
 
 /**
  * Search Shopify products by a query string.
- * Returns up to `limit` results in a clean internal shape.
  *
- * @param {string} query   — Shopify search query (e.g. "vitamin c immunity")
- * @param {number} [limit=3]
- * @returns {Promise<ShopifyProduct[]>}
+ * Shopify Storefront API query syntax:
+ *   "genacol"          → full-text search across title, tags, vendor, body
+ *   "title:genacol"    → title field only (more precise)
+ *   "tag:collagen"     → products tagged "collagen"
+ *   ""  (empty string) → returns all products (for browsing)
+ *
+ * @param {string} query
+ * @param {number} [limit=4]
+ * @returns {Promise<import('./shopifyService.js').ShopifyProduct[]>}
  */
-export async function searchProducts(query, limit = 3) {
+export async function searchProducts(query, limit = 4) {
   if (!STORE_DOMAIN || !STOREFRONT_TOKEN) {
-    console.warn('[Shopify] Storefront token not configured'); return []
+    console.warn('[Shopify] SHOPIFY_STORE_DOMAIN or SHOPIFY_STOREFRONT_TOKEN not set')
+    return []
   }
 
   const res = await fetch(STOREFRONT_URL, {
     method: 'POST',
     headers: {
-      'Content-Type':                     'application/json',
+      'Content-Type':                      'application/json',
       'X-Shopify-Storefront-Access-Token': STOREFRONT_TOKEN
     },
     body: JSON.stringify({
       query:     PRODUCT_SEARCH_QUERY,
-      variables: { query, first: limit }
+      variables: { query: query || '', first: limit }
     })
   })
 
-  if (!res.ok) throw new Error(`Shopify Storefront API error: ${res.status}`)
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Shopify Storefront API ${res.status}: ${text.slice(0, 200)}`)
+  }
 
-  const { data, errors } = await res.json()
-  if (errors?.length) throw new Error(`Shopify GraphQL error: ${errors[0].message}`)
+  const json = await res.json()
 
-  return (data?.products?.edges || []).map(({ node }) => ({
+  if (json.errors?.length) {
+    throw new Error(`Shopify GraphQL: ${json.errors[0].message}`)
+  }
+
+  return (json.data?.products?.edges || []).map(({ node }) => ({
     id:          node.id,
     title:       node.title,
     handle:      node.handle,
-    description: node.description?.slice(0, 400) || '',
+    description: node.description?.slice(0, 350) || '',
     tags:        node.tags || [],
     minPrice:    node.priceRange.minVariantPrice,
     maxPrice:    node.priceRange.maxVariantPrice,
@@ -179,61 +119,117 @@ export async function searchProducts(query, limit = 3) {
   }))
 }
 
-/**
- * Product-browse triggers — messages asking to see the catalog broadly.
- * These bypass the health keyword map and fetch top products instead.
- */
-const BROWSE_PATTERNS = [
-  /\b(anong|ano ang|ipakita|show|list|pakita|lahat|all|catalog|products?|supplements?|available|meron|mayroon|may)\b.{0,40}\b(products?|supplements?|items?|available|nyo|ninyo|kayo|store|shop)\b/i,
-  /\b(what|what's|whats).{0,20}\b(available|you have|do you (have|sell|carry|offer))\b/i,
-  /\b(products?|supplements?|vitamins?|items?)\s+(nyo|ninyo|ng mediko|available|mo|ba)/i,
-  /\b(browse|explore|tingnan|tumingin|gusto kong makita)\b/i,
-]
+// ── Keyword extraction (dynamic, loaded from Supabase) ────────
 
 /**
- * Returns true if the message is asking to browse/list products generally.
- * @param {string} message
- * @returns {boolean}
+ * Stopwords to ignore when doing product name search.
+ * Words that appear in many messages but are not product-related.
  */
+const STOPWORDS = new Set([
+  'the','a','an','is','are','was','were','be','been','have','has','had',
+  'do','does','did','will','would','could','should','may','might','must',
+  'shall','can','po','ba','ang','ng','mga','sa','na','at','ay','ni','ko',
+  'mo','siya','kayo','kami','tayo','sila','ito','iyon','yon','ano','alin',
+  'sino','kanino','paano','kailan','saan','bakit','hindi','wala','may',
+  'meron','gusto','pwede','puwede','lang','din','rin','nga','naman','talaga',
+  'yung','yun','dito','doon','dyan','what','how','why','when','where','who',
+  'which','that','this','with','for','from','have','about','your','our',
+  'their','they','you','not','but','and','or','if','then','there','here'
+])
+
+/**
+ * Extract Shopify search terms from a customer message.
+ * Loads keyword patterns from Supabase (cached for 5 min).
+ *
+ * Returns an array of deduplicated search term strings.
+ *
+ * @param {string} message
+ * @returns {Promise<string[]>}
+ */
+export async function extractSearchTerms(message) {
+  const lower   = message.toLowerCase()
+  const found   = new Set()
+  const keywords = await loadKeywords()
+
+  // Match against dynamic keyword patterns from DB
+  for (const { pattern, search_term } of keywords) {
+    if (lower.includes(pattern)) {
+      found.add(search_term)
+    }
+  }
+
+  // Also try every meaningful word in the message as a potential product name
+  // This catches "Genacol", "Glutathione", etc. even without a keyword entry
+  const words = message
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .map(w => w.toLowerCase().trim())
+    .filter(w => w.length >= 3 && !STOPWORDS.has(w))
+
+  for (const word of words) {
+    found.add(word)
+  }
+
+  return [...found]
+}
+
+// ── Browse detection ──────────────────────────────────────────
+
+const BROWSE_PATTERNS = [
+  /\b(anong|ano ang|ipakita|show|list|pakita|lahat|all|catalog)\b.{0,40}\b(products?|supplements?|items?|available|nyo|ninyo)\b/i,
+  /\b(what|whats).{0,20}\b(available|you have|do you (have|sell|carry|offer))\b/i,
+  /\b(products?|supplements?|vitamins?)\s+(nyo|ninyo|ng mediko|available|ba)/i,
+  /\b(browse|explore|tingnan|gusto kong makita|pakita lahat)\b/i,
+  /\btingnan.{0,20}\bproducts?\b/i,
+]
+
 function isBrowseRequest(message) {
   return BROWSE_PATTERNS.some(p => p.test(message))
 }
 
+// ── Main context builder ──────────────────────────────────────
+
 /**
- * Given a raw customer message, search Shopify for relevant products.
+ * Given a customer message, find relevant Shopify products to inject
+ * into the AI's context.
  *
- * Strategy:
- *   1. If health keywords detected → search by those keywords
- *   2. If browse/catalog request detected → fetch top products broadly
- *   3. If specific product name mentioned → search by that name
- *   4. Otherwise → return [] (no context injected, Medi answers generally)
+ * Search strategy (in order):
+ *   1. Dynamic keyword match from DB → search those terms
+ *   2. Meaningful words in message → search as product names
+ *   3. Browse/catalog request → fetch first N products (no query filter)
+ *   4. Nothing matched → return []
  *
  * @param {string} message
- * @returns {Promise<ShopifyProduct[]>}
+ * @returns {Promise<import('./shopifyService.js').ShopifyProduct[]>}
  */
 export async function getProductContextForMessage(message) {
   try {
-    // Strategy 1: health keyword match
-    const keywords = extractSearchKeywords(message)
-    if (keywords.length) {
-      const query = keywords.slice(0, 4).join(' OR ')
-      const results = await searchProducts(query, 3)
-      if (results.length) return results
+    // Strategy 1 + 2: keyword match AND word extraction (merged)
+    const terms = await extractSearchTerms(message)
+
+    if (terms.length) {
+      // Try each term individually — Shopify finds more with single terms
+      // than with OR-joined multi-term queries for product titles
+      const results = []
+      const seen    = new Set()
+
+      for (const term of terms.slice(0, 5)) {
+        const hits = await searchProducts(term, 3)
+        for (const p of hits) {
+          if (!seen.has(p.id)) {
+            seen.add(p.id)
+            results.push(p)
+          }
+        }
+        if (results.length >= 4) break
+      }
+
+      if (results.length) return results.slice(0, 4)
     }
 
-    // Strategy 2: browse/catalog request — fetch top products
+    // Strategy 3: browse request — empty query = first N products
     if (isBrowseRequest(message)) {
-      return await searchProducts('*', 5)
-    }
-
-    // Strategy 3: looks like a specific product name (3+ char capitalised words)
-    const productWords = message.match(/\b[A-Za-z][a-zA-Z]{2,}\b/g) || []
-    const filtered = productWords
-      .filter(w => !'the a an is are was were be been have has had do does did will would could should may might must shall can po ba ang ng mga sa'.split(' ').includes(w.toLowerCase()))
-    if (filtered.length) {
-      const nameQuery = filtered.slice(0, 3).join(' ')
-      const results = await searchProducts(nameQuery, 3)
-      if (results.length) return results
+      return await searchProducts('', 6)
     }
 
     return []
@@ -243,35 +239,16 @@ export async function getProductContextForMessage(message) {
   }
 }
 
-// ── Admin API order lookup ────────────────────────────────────
+// ── Order lookup ──────────────────────────────────────────────
 
-/**
- * @typedef {Object} OrderInfo
- * @property {string}  name            — order number e.g. "#1042"
- * @property {string}  totalPrice
- * @property {string}  financialStatus — e.g. "paid"
- * @property {string}  fulfillmentStatus
- * @property {string[]} trackingNumbers
- * @property {string}  statusUrl       — order tracking URL
- */
-
-/**
- * Look up a Shopify order by order name (e.g. "#1042") and customer email.
- * Uses the Admin REST API — requires SHOPIFY_ADMIN_TOKEN.
- *
- * @param {string} orderName     — e.g. "1042" or "#1042"
- * @param {string} customerEmail
- * @returns {Promise<OrderInfo | null>}
- */
 export async function lookupOrder(orderName, customerEmail) {
   if (!STORE_DOMAIN || !ADMIN_TOKEN) {
-    console.warn('[Shopify] Admin token not configured'); return null
+    console.warn('[Shopify] Admin token not configured')
+    return null
   }
 
-  // Strip leading # if present
   const name = orderName.replace(/^#/, '')
-
-  const url = `${ADMIN_URL}/orders.json?name=${encodeURIComponent(name)}&email=${encodeURIComponent(customerEmail)}&status=any`
+  const url  = `${ADMIN_URL}/orders.json?name=${encodeURIComponent(name)}&email=${encodeURIComponent(customerEmail)}&status=any`
 
   const res = await fetch(url, {
     headers: {
@@ -285,9 +262,7 @@ export async function lookupOrder(orderName, customerEmail) {
   const { orders } = await res.json()
   if (!orders?.length) return null
 
-  const order = orders[0]
-
-  // Collect tracking numbers from all fulfillments
+  const order          = orders[0]
   const trackingNumbers = (order.fulfillments || [])
     .flatMap(f => f.tracking_numbers || [])
     .filter(Boolean)
@@ -302,21 +277,9 @@ export async function lookupOrder(orderName, customerEmail) {
   }
 }
 
-/**
- * Detect if a message is asking about an order.
- * Returns { orderName, email } if found, or null.
- *
- * Customers typically say: "order ko #1042" or "track 1042 email@example.com"
- *
- * @param {string} message
- * @returns {{ orderName: string, email: string } | null}
- */
 export function extractOrderQuery(message) {
   const orderMatch = message.match(/#?(\d{4,})/)?.[1]
   const emailMatch = message.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0]
-
-  if (orderMatch && emailMatch) {
-    return { orderName: orderMatch, email: emailMatch }
-  }
+  if (orderMatch && emailMatch) return { orderName: orderMatch, email: emailMatch }
   return null
 }
