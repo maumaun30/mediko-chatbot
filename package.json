@@ -1,13 +1,13 @@
 {
   "name": "mediko-chat-api",
-  "version": "1.0.0",
+  "version": "6.0.0",
   "description": "Mediko AI Chatbot API — Tagalog customer support for store.mediko.ph",
   "type": "module",
   "main": "src/app.js",
   "scripts": {
     "dev": "nodemon src/app.js",
     "start": "node src/app.js",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "test": "node --test tests/chat.test.js"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
@@ -16,7 +16,9 @@
     "dotenv": "^16.4.5",
     "fastify": "^4.27.0",
     "fastify-plugin": "^4.5.1",
-    "openai": "^4.52.7"
+    "openai": "^4.52.7",
+    "ws": "^8.18.0",
+    "@fastify/static": "^7.0.4"
   },
   "devDependencies": {
     "nodemon": "^3.1.4",

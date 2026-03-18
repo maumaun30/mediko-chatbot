@@ -1,12 +1,15 @@
 /**
  * promptService.js
  *
- * Builds the system prompt for the Mediko AI chatbot.
- * Phase 1: persona + guardrails only.
- * Phase 2 will inject live Shopify product context here.
+ * Builds the OpenAI messages array with:
+ *   1. Medi's Tagalog persona + guardrails (always present)
+ *   2. Live Shopify product context (injected per request)
+ *   3. Order info context (injected when order lookup succeeds)
+ *   4. Conversation history
+ *   5. Current user message
  */
 
-// ── Persona ─────────────────────────────────────────────────
+// ── Persona ──────────────────────────────────────────────────
 
 const MEDI_PERSONA = `\
 Ikaw si Medi — ang AI customer support assistant ng Mediko, isang tindahan ng premium supplements sa Pilipinas (store.mediko.ph).
@@ -26,7 +29,7 @@ TRABAHO MO:
 1. Tulungan ang mga customer na mahanap ang tamang supplement batay sa kanilang pangangailangan o sintomas.
 2. Sagutin ang mga tanong tungkol sa mga produkto ng Mediko (ingredients, dosage, benepisyo, presyo).
 3. Tulungan sa mga katanungan tungkol sa order at shipping.
-4. Mag-refer ng tama kung ang tanong ay lampas sa iyong kaalaman.
+4. Kung available ang impormasyon ng produkto sa ibaba, gamitin ito sa iyong sagot. Huwag mag-imbento ng detalye.
 
 MGA DAPAT IWASAN (MAHALAGANG ALITUNTUNIN):
 - HUWAG mag-diagnose ng sakit o medikal na kondisyon.
@@ -34,82 +37,110 @@ MGA DAPAT IWASAN (MAHALAGANG ALITUNTUNIN):
 - HUWAG rekomendasyon ng papalitan ang reseta ng doktor. Laging sabihin: "Kumonsulta muna sa inyong doktor kung may medikal na kondisyon kayo."
 - HUWAG pag-usapan ang mga kakumpitensya o ibang brands.
 - HUWAG magbigay ng eksaktong medikal na dosis para sa mga pasyente — i-refer sa doktor.
-- HUWAG mag-imbento ng impormasyon tungkol sa produkto. Kung hindi mo alam, sabihin mo.
+- HUWAG mag-imbento ng presyo o detalye ng produkto. Kung wala sa konteksto, sabihin: "Para sa pinakabagong impormasyon, bisitahin po ang store.mediko.ph."
 
 KUNG WALANG SOLUSYON:
-Kung hindi mo masagot ang tanong ng customer, sabihin:
 "Pasensya na po. Para sa mas detalyadong tulong, maaari kayong makipag-ugnayan sa aming team sa store.mediko.ph o mag-email sa support@mediko.ph."
 `
 
-// ── Product context block (Phase 2 will populate this) ──────
+// ── Product context block ────────────────────────────────────
 
 /**
- * Format product data from Shopify into a readable context block.
- * @param {Array} products  — array of Shopify product objects
+ * Format Shopify products into a Tagalog-friendly context block.
+ * @param {Array} products
  * @returns {string}
  */
 function buildProductContext(products = []) {
   if (!products.length) return ''
 
   const lines = products.map((p, i) => {
-    const tags = p.tags?.length ? `\n   Tags/kategorya: ${p.tags.join(', ')}` : ''
-    const price = p.priceRange?.minVariantPrice?.amount
-      ? `\n   Presyo: ₱${parseFloat(p.priceRange.minVariantPrice.amount).toFixed(2)}`
-      : ''
-    const desc = p.description
-      ? `\n   Deskripsyon: ${p.description.slice(0, 300)}${p.description.length > 300 ? '...' : ''}`
+    const price = p.minPrice?.amount
+      ? `₱${parseFloat(p.minPrice.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
+      : null
+
+    const priceMax = p.maxPrice?.amount && p.maxPrice.amount !== p.minPrice?.amount
+      ? ` – ₱${parseFloat(p.maxPrice.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
       : ''
 
-    return `${i + 1}. ${p.title}${price}${tags}${desc}`
+    const priceStr  = price ? `\n   Presyo: ${price}${priceMax}` : ''
+    const tagsStr   = p.tags?.length ? `\n   Tags: ${p.tags.join(', ')}` : ''
+    const descStr   = p.description ? `\n   Deskripsyon: ${p.description}` : ''
+
+    // List available variants (sizes/flavors) if more than one
+    const variants = (p.variants || []).filter(v => v.available)
+    const variantStr = variants.length > 1
+      ? `\n   Available variants: ${variants.map(v => v.title).join(', ')}`
+      : ''
+
+    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN || 'store.mediko.ph'}/products/${p.handle}`
+
+    return `${i + 1}. ${p.title}${priceStr}${tagsStr}${descStr}${variantStr}\n   Link: ${url}`
   })
 
-  return `\nKAUGNAY NA MGA PRODUKTO NG MEDIKO (gamitin bilang konteksto kung angkop):\n${lines.join('\n\n')}\n`
+  return `
+━━━ KAUGNAY NA MGA PRODUKTO NG MEDIKO ━━━
+(Gamitin ang impormasyong ito kung angkop. Huwag mag-imbento ng detalye na wala dito.)
+
+${lines.join('\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`
 }
 
 // ── Order context block ──────────────────────────────────────
 
 /**
- * Format a Shopify order into a readable context block.
+ * Format a Shopify order into a Tagalog context block.
  * @param {object|null} order
  * @returns {string}
  */
 function buildOrderContext(order = null) {
   if (!order) return ''
 
-  const fulfillment = order.fulfillmentStatus || 'Hindi pa naka-fulfill'
-  const financial = order.financialStatus || 'Hindi available'
-  const tracking = order.trackingNumbers?.length
-    ? `Tracking number: ${order.trackingNumbers.join(', ')}`
-    : 'Walang tracking number pa'
+  const statusMap = {
+    paid:        'Bayad na',
+    pending:     'Nakabinbin pa',
+    refunded:    'Naibalik na',
+    unfulfilled: 'Hindi pa naipapadala',
+    fulfilled:   'Naipadala na',
+    partial:     'Bahagi ay naipadala na'
+  }
 
-  return `\nIMPORMASYON SA ORDER NG CUSTOMER:
-Order #${order.name} — ₱${parseFloat(order.totalPrice).toFixed(2)}
-Status ng bayad: ${financial}
-Status ng shipping: ${fulfillment}
-${tracking}
+  const payStatus  = statusMap[order.financialStatus]   ?? order.financialStatus
+  const shipStatus = statusMap[order.fulfillmentStatus] ?? order.fulfillmentStatus
+  const tracking   = order.trackingNumbers?.length
+    ? `Tracking: ${order.trackingNumbers.join(', ')}`
+    : 'Wala pang tracking number'
+  const statusLink = order.statusUrl
+    ? `\n   I-track ang order: ${order.statusUrl}`
+    : ''
+
+  return `
+━━━ IMPORMASYON SA ORDER ━━━
+Order ${order.name} — ₱${parseFloat(order.totalPrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+Status ng bayad: ${payStatus}
+Status ng delivery: ${shipStatus}
+${tracking}${statusLink}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `
 }
 
 // ── Main export ──────────────────────────────────────────────
 
 /**
- * Build the full messages array for the OpenAI Chat Completions API.
+ * Build the full messages array for OpenAI Chat Completions.
  *
  * @param {object} opts
- * @param {string}        opts.userMessage     — current user message
- * @param {Array}         opts.history         — prior {role, content} pairs from Supabase
- * @param {Array}         [opts.products]      — Shopify products for context (Phase 2)
- * @param {object|null}   [opts.order]         — Shopify order info (Phase 2)
+ * @param {string}       opts.userMessage
+ * @param {Array}        opts.history        — prior {role, content} pairs
+ * @param {Array}        [opts.products]     — Shopify products
+ * @param {object|null}  [opts.order]        — Shopify order info
  * @returns {Array<{role: string, content: string}>}
  */
 export function buildMessages({ userMessage, history = [], products = [], order = null }) {
   const productBlock = buildProductContext(products)
-  const orderBlock = buildOrderContext(order)
-  const contextBlock = productBlock || orderBlock
-    ? `\n--- KONTEKSTO ---${productBlock}${orderBlock}--- WAKAS NG KONTEKSTO ---\n`
-    : ''
-
-  const systemPrompt = MEDI_PERSONA + contextBlock
+  const orderBlock   = buildOrderContext(order)
+  const systemPrompt = MEDI_PERSONA + productBlock + orderBlock
 
   return [
     { role: 'system', content: systemPrompt },

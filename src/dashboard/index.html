@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mediko — Agent Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+
+  :root {
+    --bg:       #0f1117;
+    --surface:  #1a1d27;
+    --surface2: #22263a;
+    --border:   #2e3350;
+    --text:     #e2e8f0;
+    --muted:    #8892a4;
+    --accent:   #4f8ef7;
+    --green:    #34d399;
+    --amber:    #fbbf24;
+    --red:      #f87171;
+    --teal:     #2dd4bf;
+  }
+
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; font-size: 14px; }
+
+  /* ── Header ── */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; height: 52px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .logo  { font-weight: 700; font-size: 16px; color: var(--accent); letter-spacing: -.3px; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .ws-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); transition: background .3s; }
+  .ws-dot.connected { background: var(--green); }
+  .stats-bar { display: flex; gap: 20px; }
+  .stat { text-align: center; }
+  .stat-val { font-size: 18px; font-weight: 700; color: var(--text); line-height: 1; }
+  .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat-val.urgent { color: var(--amber); }
+
+  /* ── Layout ── */
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Session list ── */
+  .sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .sidebar-title { font-weight: 600; font-size: 13px; }
+  .filter-tabs { display: flex; gap: 4px; }
+  .filter-tab { padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; background: transparent; color: var(--muted); border: 1px solid transparent; transition: all .15s; }
+  .filter-tab.active { background: var(--accent); color: #fff; }
+  .session-list { flex: 1; overflow-y: auto; }
+  .session-item { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; display: flex; flex-direction: column; gap: 4px; }
+  .session-item:hover { background: var(--surface2); }
+  .session-item.active { background: var(--surface2); border-left: 3px solid var(--accent); padding-left: 13px; }
+  .session-item.handoff { border-left: 3px solid var(--amber); padding-left: 13px; }
+  .session-meta { display: flex; align-items: center; justify-content: space-between; }
+  .session-id { font-size: 12px; font-weight: 600; color: var(--text); font-family: monospace; }
+  .session-time { font-size: 11px; color: var(--muted); }
+  .session-info { display: flex; align-items: center; gap: 6px; }
+  .badge { padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+  .badge-agent    { background: #2d3748; color: var(--amber); }
+  .badge-ai       { background: #1a2e1a; color: var(--green); }
+  .badge-widget   { background: #1a2036; color: var(--accent); }
+  .badge-whatsapp { background: #1a2e24; color: var(--teal); }
+  .badge-messenger{ background: #2a1a36; color: #a78bfa; }
+  .session-preview { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pulse { animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  /* ── Chat panel ── */
+  .chat-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .chat-header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: var(--surface); }
+  .chat-session-info { display: flex; flex-direction: column; gap: 2px; }
+  .chat-session-id { font-size: 13px; font-weight: 600; font-family: monospace; }
+  .chat-session-meta { font-size: 12px; color: var(--muted); }
+  .chat-actions { display: flex; gap: 8px; }
+  .btn { padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
+  .btn-takeover  { background: var(--amber); color: #000; }
+  .btn-return    { background: var(--surface2); color: var(--green); border: 1px solid var(--green); }
+  .btn-takeover:hover { opacity: .85; }
+  .btn-return:hover   { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: default; }
+
+  /* ── Messages ── */
+  .messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 75%; display: flex; flex-direction: column; gap: 3px; }
+  .msg.user { align-self: flex-end; align-items: flex-end; }
+  .msg.assistant { align-self: flex-start; align-items: flex-start; }
+  .msg-bubble { padding: 9px 13px; border-radius: 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .msg.user .msg-bubble      { background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+  .msg.assistant .msg-bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 3px; }
+  .msg.agent .msg-bubble     { background: #2d2a12; color: var(--amber); border: 1px solid #4a4010; border-bottom-left-radius: 3px; }
+  .msg-time { font-size: 11px; color: var(--muted); }
+  .msg-label { font-size: 11px; color: var(--amber); font-weight: 600; }
+
+  /* ── Agent reply box ── */
+  .reply-bar { padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .reply-bar.hidden { display: none; }
+  .reply-inner { display: flex; gap: 10px; align-items: flex-end; }
+  .reply-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 14px; resize: none; min-height: 42px; max-height: 120px; outline: none; font-family: inherit; }
+  .reply-input:focus { border-color: var(--accent); }
+  .btn-send { background: var(--accent); color: #fff; padding: 10px 18px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-send:hover { opacity: .85; }
+  .reply-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  /* ── Empty state ── */
+  .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
+  .empty-icon { font-size: 36px; opacity: .4; }
+  .empty-title { font-size: 15px; font-weight: 500; }
+  .empty-sub { font-size: 13px; }
+
+  /* ── Toast ── */
+  .toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 100; }
+  .toast { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 13px; max-width: 300px; animation: slideIn .2s ease; }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error   { border-color: var(--red);   color: var(--red); }
+  .toast.info    { border-color: var(--accent); color: var(--accent); }
+  .toast.warning { border-color: var(--amber);  color: var(--amber); }
+  @keyframes slideIn { from { transform: translateX(20px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Mediko Agent Dashboard</div>
+  <div class="header-right">
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat"><div class="stat-val" id="stat-total">—</div><div class="stat-lbl">Total sessions</div></div>
+      <div class="stat"><div class="stat-val urgent" id="stat-waiting">—</div><div class="stat-lbl">Waiting for agent</div></div>
+      <div class="stat"><div class="stat-val" id="stat-today">—</div><div class="stat-lbl">Today</div></div>
+    </div>
+    <div class="ws-status">
+      <div class="ws-dot" id="ws-dot"></div>
+      <span id="ws-label">Connecting...</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Session list -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">Sessions</span>
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="all"    onclick="setFilter('all')">All</button>
+        <button class="filter-tab"        data-filter="agent"  onclick="setFilter('agent')">Agent</button>
+        <button class="filter-tab"        data-filter="ai"     onclick="setFilter('ai')">AI</button>
+      </div>
+    </div>
+    <div class="session-list" id="session-list">
+      <div class="empty" style="padding:40px 0">
+        <div class="empty-icon">○</div>
+        <div class="empty-title">Loading sessions...</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Chat panel -->
+  <main class="chat-panel" id="chat-panel">
+    <div class="empty" id="empty-state">
+      <div class="empty-icon">◎</div>
+      <div class="empty-title">Select a session</div>
+      <div class="empty-sub">Choose a conversation from the left to view it</div>
+    </div>
+
+    <div id="chat-view" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+      <div class="chat-header">
+        <div class="chat-session-info">
+          <div class="chat-session-id" id="cv-session-id">—</div>
+          <div class="chat-session-meta" id="cv-session-meta">—</div>
+        </div>
+        <div class="chat-actions" id="cv-actions"></div>
+      </div>
+      <div class="messages" id="cv-messages"></div>
+    </div>
+
+    <div class="reply-bar hidden" id="reply-bar">
+      <div class="reply-inner">
+        <textarea class="reply-input" id="reply-input" placeholder="Type a reply as agent..." rows="1"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentReply()}"
+          oninput="autoResize(this)"></textarea>
+        <button class="btn btn-send" onclick="sendAgentReply()">Send</button>
+      </div>
+      <div class="reply-hint">Enter to send · Shift+Enter for new line</div>
+    </div>
+  </main>
+
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const API     = ''   // same origin
+const WS_URL  = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/agent/ws`
+const SECRET  = new URLSearchParams(location.search).get('secret') ?? ''
+
+let ws               = null
+let currentSessionId = null
+let sessions         = {}   // id → session object
+let currentFilter    = 'all'
+let wsReconnectTimer = null
+
+// ── WebSocket ──────────────────────────────────────────────
+
+function connectWs() {
+  if (ws) { ws.onclose = null; ws.close() }
+
+  ws = new WebSocket(WS_URL)
+
+  ws.onopen = () => {
+    setWsStatus(true)
+    clearTimeout(wsReconnectTimer)
+    loadSessions()
+    loadStats()
+  }
+
+  ws.onmessage = ({ data }) => {
+    try { handleWsEvent(JSON.parse(data)) } catch {}
+  }
+
+  ws.onclose = () => {
+    setWsStatus(false)
+    wsReconnectTimer = setTimeout(connectWs, 3000)
+  }
+
+  ws.onerror = () => ws.close()
+}
+
+function setWsStatus(online) {
+  document.getElementById('ws-dot').classList.toggle('connected', online)
+  document.getElementById('ws-label').textContent = online ? 'Connected' : 'Reconnecting...'
+}
+
+function sendWs(payload) {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload))
+  } else {
+    toast('Not connected to server', 'error')
+  }
+}
+
+// ── WS Event handler ───────────────────────────────────────
+
+function handleWsEvent(evt) {
+  switch (evt.type) {
+
+    case 'handoff_requested':
+      toast(`Handoff requested — ${evt.channel} · ${shortId(evt.sessionId)}`, 'warning')
+      loadSessions()
+      loadStats()
+      if (evt.sessionId === currentSessionId) refreshCurrentSession()
+      break
+
+    case 'customer_message':
+      if (evt.sessionId === currentSessionId) refreshCurrentSession()
+      else loadSessions()
+      break
+
+    case 'mode_changed':
+      loadSessions()
+      loadStats()
+      if (evt.sessionId === currentSessionId) refreshCurrentSession()
+      break
+
+    case 'agent_sent':
+      if (evt.sessionId === currentSessionId) refreshCurrentSession()
+      break
+
+    case 'connected':
+      // server ack — already handled by ws.onopen
+      break
+  }
+}
+
+// ── Sessions ───────────────────────────────────────────────
+
+async function loadSessions() {
+  const filter = currentFilter === 'all' ? '' : `?mode=${currentFilter}`
+  const res    = await apiFetch(`/api/admin/sessions${filter}&limit=50`)
+  if (!res) return
+
+  sessions = {}
+  res.sessions?.forEach(s => sessions[s.id] = s)
+  renderSessionList(res.sessions || [])
+}
+
+function setFilter(f) {
+  currentFilter = f
+  document.querySelectorAll('.filter-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.filter === f)
+  )
+  loadSessions()
+}
+
+function renderSessionList(list) {
+  const el = document.getElementById('session-list')
+  if (!list.length) {
+    el.innerHTML = `<div class="empty" style="padding:40px 0">
+      <div class="empty-icon">○</div>
+      <div class="empty-title">No sessions</div>
+    </div>`
+    return
+  }
+
+  el.innerHTML = list.map(s => {
+    const isHandoff = s.mode === 'agent' && !s.assigned_agent
+    const isActive  = s.id === currentSessionId
+    const classes   = ['session-item', isActive ? 'active' : '', isHandoff ? 'handoff' : ''].join(' ').trim()
+    const time      = relativeTime(s.last_active)
+    const modeBadge = `<span class="badge badge-${s.mode}">${s.mode === 'agent' ? '⚡ Agent' : '◆ AI'}</span>`
+    const chanBadge = `<span class="badge badge-${s.channel}">${s.channel}</span>`
+    const pulseIcon = isHandoff ? '<span class="pulse" style="color:var(--amber)">●</span> ' : ''
+
+    return `<div class="${classes}" onclick="openSession('${s.id}')">
+      <div class="session-meta">
+        <span class="session-id">${pulseIcon}${shortId(s.id)}</span>
+        <span class="session-time">${time}</span>
+      </div>
+      <div class="session-info">${modeBadge}${chanBadge}</div>
+      ${s.customer_email ? `<div class="session-preview">${s.customer_email}</div>` : ''}
+    </div>`
+  }).join('')
+}
+
+// ── Session detail ─────────────────────────────────────────
+
+async function openSession(id) {
+  currentSessionId = id
+  document.getElementById('empty-state').style.display = 'none'
+  const chatView = document.getElementById('chat-view')
+  chatView.style.display = 'flex'
+
+  // Highlight in list
+  document.querySelectorAll('.session-item').forEach(el => {
+    el.classList.toggle('active', el.onclick?.toString().includes(id))
+  })
+
+  await refreshCurrentSession()
+}
+
+async function refreshCurrentSession() {
+  if (!currentSessionId) return
+  const res = await apiFetch(`/api/admin/sessions/${currentSessionId}`)
+  if (!res) return
+
+  const { session, messages } = res
+
+  document.getElementById('cv-session-id').textContent =
+    `${shortId(session.id)} · ${session.channel}`
+
+  document.getElementById('cv-session-meta').textContent =
+    [
+      session.customer_email,
+      session.channel_user_id,
+      `Mode: ${session.mode}`,
+      session.assigned_agent ? `Agent: ${session.assigned_agent}` : null,
+      session.handoff_at ? `Handoff: ${relativeTime(session.handoff_at)}` : null
+    ].filter(Boolean).join(' · ')
+
+  renderMessages(messages)
+  renderActions(session)
+  renderReplyBar(session)
+}
+
+function renderMessages(messages) {
+  const el = document.getElementById('cv-messages')
+  if (!messages.length) {
+    el.innerHTML = '<div class="empty" style="padding:40px 0"><div class="empty-sub">No messages yet</div></div>'
+    return
+  }
+
+  el.innerHTML = messages.map(m => {
+    const isAgent = m.content?.startsWith('[Agent]')
+    const cls     = isAgent ? 'agent' : m.role
+    const content = isAgent ? m.content.replace('[Agent] ', '') : m.content
+    const label   = isAgent ? '<div class="msg-label">Agent reply</div>' : ''
+    const time    = new Date(m.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
+    return `<div class="msg ${cls}">
+      ${label}
+      <div class="msg-bubble">${escHtml(content)}</div>
+      <div class="msg-time">${time}${m.tokens_used ? ` · ${m.tokens_used} tokens` : ''}</div>
+    </div>`
+  }).join('')
+
+  el.scrollTop = el.scrollHeight
+}
+
+function renderActions(session) {
+  const el = document.getElementById('cv-actions')
+  if (session.mode === 'ai') {
+    el.innerHTML = `<button class="btn btn-takeover" onclick="takeOver()">Take over</button>`
+  } else {
+    el.innerHTML = `<button class="btn btn-return" onclick="returnToAi()">Return to AI</button>`
+  }
+}
+
+function renderReplyBar(session) {
+  const bar = document.getElementById('reply-bar')
+  bar.classList.toggle('hidden', session.mode !== 'agent')
+}
+
+// ── Agent commands ─────────────────────────────────────────
+
+function takeOver() {
+  if (!currentSessionId) return
+  sendWs({ type: 'take_over', sessionId: currentSessionId })
+  toast('Taking over session...', 'info')
+}
+
+function returnToAi() {
+  if (!currentSessionId) return
+  sendWs({ type: 'return_to_ai', sessionId: currentSessionId })
+  toast('Returning session to Medi...', 'info')
+}
+
+function sendAgentReply() {
+  const input = document.getElementById('reply-input')
+  const text  = input.value.trim()
+  if (!text || !currentSessionId) return
+
+  sendWs({ type: 'agent_message', sessionId: currentSessionId, text })
+  input.value = ''
+  input.style.height = ''
+  toast('Message sent', 'success')
+}
+
+// ── Stats ──────────────────────────────────────────────────
+
+async function loadStats() {
+  const res = await apiFetch('/api/admin/stats')
+  if (!res) return
+  document.getElementById('stat-total').textContent   = res.total
+  document.getElementById('stat-waiting').textContent = res.waitingForAgent
+  document.getElementById('stat-today').textContent   = res.todaySessions
+}
+
+// ── Utilities ──────────────────────────────────────────────
+
+async function apiFetch(path) {
+  try {
+    const headers = SECRET ? { 'x-admin-secret': SECRET } : {}
+    const res = await fetch(API + path, { headers })
+    if (!res.ok) return null
+    return res.json()
+  } catch { return null }
+}
+
+function shortId(id) {
+  return id ? id.slice(0, 8) + '...' : '—'
+}
+
+function relativeTime(iso) {
+  if (!iso) return '—'
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 60000)  return 'just now'
+  if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`
+  if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`
+  return `${Math.floor(diff/86400000)}d ago`
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+function autoResize(el) {
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+}
+
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toasts')
+  const t = document.createElement('div')
+  t.className = `toast ${type}`
+  t.textContent = msg
+  c.appendChild(t)
+  setTimeout(() => t.remove(), 3500)
+}
+
+// ── Init ──────────────────────────────────────────────────
+
+connectWs()
+setInterval(() => { loadStats(); loadSessions() }, 30000)  // refresh every 30s
+</script>
+</body>
+</html>
