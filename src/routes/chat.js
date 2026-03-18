@@ -64,11 +64,21 @@ export default async function chatRoutes(fastify) {
     }
 
     // ── 3. SSE headers ───────────────────────────────────────
+    // Must set CORS header manually here — reply.raw.writeHead() bypasses
+    // @fastify/cors because it writes directly to the Node http response.
+    const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
+    const requestOrigin = request.headers.origin || ''
+    const corsOrigin = allowedOrigin === '*'
+      ? '*'
+      : (requestOrigin === allowedOrigin ? requestOrigin : '')
+
     reply.raw.writeHead(200, {
-      'Content-Type':      'text/event-stream',
-      'Cache-Control':     'no-cache, no-transform',
-      'Connection':        'keep-alive',
-      'X-Accel-Buffering': 'no'
+      'Content-Type':                'text/event-stream',
+      'Cache-Control':               'no-cache, no-transform',
+      'Connection':                  'keep-alive',
+      'X-Accel-Buffering':           'no',
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Access-Control-Allow-Headers':'Content-Type'
     })
 
     const send = (data) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
