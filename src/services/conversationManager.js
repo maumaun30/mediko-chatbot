@@ -34,6 +34,52 @@ import {
   extractOrderQuery
 } from './shopifyService.js'
 
+// ── Off-topic detection ──────────────────────────────────────
+// Catches clearly out-of-scope requests before wasting OpenAI tokens.
+// The system prompt handles borderline cases — this catches obvious ones.
+
+const OFF_TOPIC_PATTERNS = [
+  // Code generation
+  /\b(html|css|javascript|python|code|script|program|function|algorithm|database|api|github|stackoverflow)\b/i,
+  /\b(generate|write|create|make|build|design)\b.{0,30}\b(website|webpage|app|application|portfolio|landing page|blog|template)\b/i,
+  /\b(debug|fix|refactor|optimize)\b.{0,20}\b(code|script|function|class|component)\b/i,
+
+  // Creative writing / content generation unrelated to Mediko
+  /\b(write|generate|compose|create)\b.{0,30}\b(essay|story|poem|song|lyrics|novel|article|blog post|speech)\b/i,
+
+  // Homework / academic
+  /\b(solve|calculate|compute|homework|assignment|exam|quiz|thesis|research paper)\b/i,
+
+  // Other AI / tech topics
+  /\b(chatgpt|openai|claude|gemini|llm|machine learning|artificial intelligence|neural network|blockchain|cryptocurrency|nft)\b/i,
+
+  // Entertainment / unrelated topics
+  /\b(movie|film|series|netflix|youtube|tiktok|instagram|facebook post|tweet|meme|recipe|cooking|travel|hotel|flight|visa)\b/i,
+
+  // Prompt injection attempts
+  /\b(ignore (previous|above|all)|forget (your|the) (instructions?|rules?|prompt)|you are now|act as|pretend (you are|to be)|new (persona|role|instructions?))\b/i,
+  /\b(jailbreak|DAN|do anything now|developer mode|system prompt)\b/i,
+]
+
+const OFF_TOPIC_REPLY = `Pasensya na po, ako ay customer support assistant ng Mediko lamang. Hindi ko po masasagot ang mga tanong na wala sa aming mga produkto o serbisyo.
+
+Maaari ko po kayong tulungan sa:
+• Mga supplement at produkto ng Mediko
+• Rekomendasyon batay sa inyong kalusugan
+• Order status at shipping
+• Impormasyon sa store.mediko.ph
+
+Paano ko kayo matutulungan ngayon?`
+
+/**
+ * Returns true if the message is clearly outside Mediko's scope.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isOffTopic(text) {
+  return OFF_TOPIC_PATTERNS.some(pattern => pattern.test(text))
+}
+
 // ── Handoff keyword detection ────────────────────────────────
 
 const HANDOFF_TRIGGERS = [
@@ -92,6 +138,21 @@ export async function processMessage(msg) {
     await notifyAgentInbox({ type: 'customer_message', sessionId, channel, channelUserId, text })
     await saveMessagePair(sessionId, text, null)
     return { type: 'agent', sessionId, channel, channelUserId, text, mode: 'agent' }
+  }
+
+  // ── Off-topic check — instant rejection, no OpenAI call ────
+  if (isOffTopic(text)) {
+    return {
+      type:         'off_topic',
+      sessionId,
+      channel,
+      channelUserId,
+      text,
+      mode:         'ai',
+      replyText:    OFF_TOPIC_REPLY,
+      products:     [],
+      order:        null
+    }
   }
 
   // ── AI mode — fetch Shopify context in parallel ──────────
