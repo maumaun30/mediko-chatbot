@@ -2,12 +2,14 @@
  * promptService.js
  *
  * Builds the OpenAI messages array with:
- *   1. Medi's Tagalog persona + guardrails (always present)
- *   2. Live Shopify product context (injected per request)
- *   3. Order info context (injected when order lookup succeeds)
+ *   1. Medi's Tagalog persona + guardrails
+ *   2. Live Shopify product context (with product page links)
+ *   3. Order info context
  *   4. Conversation history
  *   5. Current user message
  */
+
+const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN || 'store.mediko.ph'
 
 // ── Persona ──────────────────────────────────────────────────
 
@@ -34,7 +36,6 @@ BAWAL NA BAWAL — HINDI KA SUMASAGOT SA MGA ITO KAHIT KAILAN:
 - Anumang kahilingan na WALA sa listahan ng pinahihintulutang paksa sa itaas
 
 PAANO TUMUGON SA OFF-TOPIC NA TANONG:
-Kung ang tanong ay WALA sa iyong saklaw, tumugon PALAGI ng ganito (i-adjust ang wika):
 "Pasensya na po, ako ay customer support assistant ng Mediko lamang. Hindi ko po masasagot ang mga tanong na wala sa aming mga produkto o serbisyo. Maaari ko po kayong tulungan tungkol sa aming supplements, orders, o kalusugan na may kaugnayan sa aming mga produkto. Paano ko kayo matutulungan?"
 
 HUWAG KAILANMAN:
@@ -63,6 +64,16 @@ PINAHIHINTULUTANG MGA PAKSA (KUMPLETO):
 4. Order status, shipping, tracking, at returns ng Mediko
 5. Impormasyon tungkol sa store.mediko.ph
 
+PAGBABAHAGI NG PRODUCT LINKS (MAHALAGA):
+- Kung nagrerekomenda ka ng produkto O kung tinatanong ang customer tungkol sa isang produkto,
+  LAGING isama ang product page link nito sa iyong sagot.
+- Ang bawat produkto sa konteksto sa ibaba ay may kasamang "Link:" — gamitin ito.
+- I-format ang link nang maayos:
+    Para sa widget: "Maaari ninyong tingnan dito: [Product Name](link)"
+    Para sa WhatsApp/Messenger: "Maaari ninyong tingnan dito: link"
+- Kung hindi available ang link sa konteksto, i-refer sa store.mediko.ph.
+- Huwag mag-imbento ng links — gamitin lamang ang mga link na nasa konteksto.
+
 MGA MEDIKAL NA ALITUNTUNIN:
 - HUWAG mag-diagnose ng sakit.
 - HUWAG sabihin na ang supplement ay nagagamot ng anumang sakit — gumamit ng "maaaring makatulong sa suporta ng..."
@@ -73,14 +84,37 @@ KUNG WALANG SOLUSYON:
 "Pasensya na po. Para sa mas detalyadong tulong, makipag-ugnayan sa aming team sa store.mediko.ph o mag-email sa support@mediko.ph."
 `
 
+// ── Channel-aware link formatter ─────────────────────────────
+
+/**
+ * Format a product link based on the channel.
+ * Widget supports Markdown links. WhatsApp/Messenger use plain URLs
+ * (Meta auto-generates link previews from bare URLs).
+ *
+ * @param {string} title
+ * @param {string} url
+ * @param {string} channel  — 'widget' | 'whatsapp' | 'messenger'
+ * @returns {string}
+ */
+function formatLink(title, url, channel) {
+  if (channel === 'widget') {
+    return `[${title}](${url})`
+  }
+  // WhatsApp and Messenger render plain URLs with auto-preview
+  return url
+}
+
 // ── Product context block ────────────────────────────────────
 
 /**
- * Format Shopify products into a Tagalog-friendly context block.
- * @param {Array} products
+ * Format Shopify products into a context block for the system prompt.
+ * Includes product page URLs so Medi can share them in replies.
+ *
+ * @param {Array}  products
+ * @param {string} channel
  * @returns {string}
  */
-function buildProductContext(products = []) {
+function buildProductContext(products = [], channel = 'widget') {
   if (!products.length) return ''
 
   const lines = products.map((p, i) => {
@@ -92,24 +126,23 @@ function buildProductContext(products = []) {
       ? ` – ₱${parseFloat(p.maxPrice.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
       : ''
 
-    const priceStr  = price ? `\n   Presyo: ${price}${priceMax}` : ''
-    const tagsStr   = p.tags?.length ? `\n   Tags: ${p.tags.join(', ')}` : ''
-    const descStr   = p.description ? `\n   Deskripsyon: ${p.description}` : ''
-
-    // List available variants (sizes/flavors) if more than one
-    const variants = (p.variants || []).filter(v => v.available)
+    const priceStr   = price ? `\n   Presyo: ${price}${priceMax}` : ''
+    const tagsStr    = p.tags?.length ? `\n   Tags: ${p.tags.join(', ')}` : ''
+    const descStr    = p.description ? `\n   Deskripsyon: ${p.description}` : ''
+    const variants   = (p.variants || []).filter(v => v.available)
     const variantStr = variants.length > 1
       ? `\n   Available variants: ${variants.map(v => v.title).join(', ')}`
       : ''
 
-    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN || 'store.mediko.ph'}/products/${p.handle}`
+    const url  = `https://${STORE_DOMAIN}/products/${p.handle}`
+    const link = formatLink(p.title, url, channel)
 
-    return `${i + 1}. ${p.title}${priceStr}${tagsStr}${descStr}${variantStr}\n   Link: ${url}`
+    return `${i + 1}. ${p.title}${priceStr}${tagsStr}${descStr}${variantStr}\n   Link: ${link}\n   (Raw URL para sa reference: ${url})`
   })
 
   return `
 ━━━ KAUGNAY NA MGA PRODUKTO NG MEDIKO ━━━
-(Gamitin ang impormasyong ito kung angkop. Huwag mag-imbento ng detalye na wala dito.)
+(Gamitin ang impormasyong ito at isama ang links sa iyong sagot kung angkop.)
 
 ${lines.join('\n\n')}
 
@@ -119,11 +152,6 @@ ${lines.join('\n\n')}
 
 // ── Order context block ──────────────────────────────────────
 
-/**
- * Format a Shopify order into a Tagalog context block.
- * @param {object|null} order
- * @returns {string}
- */
 function buildOrderContext(order = null) {
   if (!order) return ''
 
@@ -162,13 +190,14 @@ ${tracking}${statusLink}
  *
  * @param {object} opts
  * @param {string}       opts.userMessage
- * @param {Array}        opts.history        — prior {role, content} pairs
- * @param {Array}        [opts.products]     — Shopify products
- * @param {object|null}  [opts.order]        — Shopify order info
+ * @param {Array}        opts.history
+ * @param {Array}        [opts.products]
+ * @param {object|null}  [opts.order]
+ * @param {string}       [opts.channel]  — 'widget' | 'whatsapp' | 'messenger'
  * @returns {Array<{role: string, content: string}>}
  */
-export function buildMessages({ userMessage, history = [], products = [], order = null }) {
-  const productBlock = buildProductContext(products)
+export function buildMessages({ userMessage, history = [], products = [], order = null, channel = 'widget' }) {
+  const productBlock = buildProductContext(products, channel)
   const orderBlock   = buildOrderContext(order)
   const systemPrompt = MEDI_PERSONA + productBlock + orderBlock
 

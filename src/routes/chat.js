@@ -113,7 +113,7 @@ export default async function chatRoutes(fastify) {
     // ── 5. AI mode — stream OpenAI response ─────────────────
     try {
       const history  = await loadHistory(decision.sessionId)
-      const messages = buildMessages({ userMessage: decision.text, history, products: decision.products ?? [], order: decision.order ?? null })
+      const messages = buildMessages({ userMessage: decision.text, history, products: decision.products ?? [], order: decision.order ?? null, channel: 'widget' })
 
       let fullText    = ''
       let totalTokens = 0
