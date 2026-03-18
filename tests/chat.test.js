@@ -465,3 +465,40 @@ test('system prompt contains strict scope boundary', async () => {
   assert.ok(system.includes('PINAHIHINTULUTANG'),      'has explicit allowed topics list')
   assert.ok(system.includes('prompt'),                 'has prompt injection guardrail')
 })
+
+// ── Product links in prompts ──────────────────────────────────
+
+test('buildMessages: product link formatted for widget (Markdown)', async () => {
+  const { buildMessages } = await import('../src/services/promptService.js')
+  const products = [{
+    title: 'Mediko Vitamin C', handle: 'vitamin-c-1000mg',
+    description: 'Immunity support.', tags: ['immunity'],
+    minPrice: { amount: '299.00' }, maxPrice: { amount: '299.00' }, variants: []
+  }]
+  const msgs   = buildMessages({ userMessage: 'May Vitamin C?', history: [], products, channel: 'widget' })
+  const system = msgs[0].content
+  assert.ok(system.includes('[Mediko Vitamin C]'),          'should have Markdown link label')
+  assert.ok(system.includes('store.mediko.ph/products/vitamin-c-1000mg'), 'should have product URL')
+})
+
+test('buildMessages: product link formatted for WhatsApp (plain URL)', async () => {
+  const { buildMessages } = await import('../src/services/promptService.js')
+  const products = [{
+    title: 'Mediko Vitamin C', handle: 'vitamin-c-1000mg',
+    description: 'Immunity support.', tags: ['immunity'],
+    minPrice: { amount: '299.00' }, maxPrice: { amount: '299.00' }, variants: []
+  }]
+  const msgs   = buildMessages({ userMessage: 'May Vitamin C?', history: [], products, channel: 'whatsapp' })
+  const system = msgs[0].content
+  // WhatsApp should get plain URL, not Markdown syntax
+  assert.ok(!system.includes('[Mediko Vitamin C]('),        'should NOT have Markdown format')
+  assert.ok(system.includes('store.mediko.ph/products/vitamin-c-1000mg'), 'should still have URL')
+})
+
+test('buildMessages: persona instructs Medi to include links in replies', async () => {
+  const { buildMessages } = await import('../src/services/promptService.js')
+  const msgs   = buildMessages({ userMessage: 'test', history: [] })
+  const system = msgs[0].content
+  assert.ok(system.includes('PAGBABAHAGI NG PRODUCT LINKS'), 'should have link-sharing instruction')
+  assert.ok(system.includes('LAGING isama ang product page link'), 'should explicitly instruct to include links')
+})
