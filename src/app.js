@@ -11,7 +11,6 @@ import analyticsRoutes          from './routes/analytics.js'
 import settingsRoutes           from './routes/settings.js'
 import dashboardRoutes          from './routes/dashboard.js'
 import { setupAgentWebSocket, closeIdleSessions } from './services/agentService.js'
-import { startIdleSessionChecker } from './services/idleSessionService.js'
 import staticPlugin             from './plugins/static.js'
 
 const PORT    = parseInt(process.env.PORT || '3001', 10)
@@ -40,8 +39,6 @@ await fastify.register(keywordRoutes,    { prefix: '/api/keywords' })
 await fastify.register(quickReplyRoutes, { prefix: '/api/quick-replies' })
 await fastify.register(settingsRoutes,  { prefix: '/api/settings' })
 await fastify.register(analyticsRoutes, { prefix: '/api/analytics' })
-await fastify.register(analyticsRoutes,  { prefix: '/api/analytics' })
-await fastify.register(settingsRoutes,   { prefix: '/api/settings' })
 await fastify.register(dashboardRoutes)
 
 if (!IS_PROD) {
@@ -52,8 +49,7 @@ if (!IS_PROD) {
 try {
   await fastify.listen({ port: PORT, host: HOST })
   setupAgentWebSocket(fastify.server)
-  startIdleSessionChecker()
-  fastify.log.info(`Mediko Chat API v6  →  http://${HOST}:${PORT}`)
+    fastify.log.info(`Mediko Chat API v6  →  http://${HOST}:${PORT}`)
 } catch (err) {
   fastify.log.error(err)
   process.exit(1)
