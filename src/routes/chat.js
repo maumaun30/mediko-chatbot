@@ -182,26 +182,37 @@ export default async function chatRoutes(fastify) {
     const valid = await sessionExists(sessionId)
     if (!valid) return reply.status(404).send({ error: 'Session not found' })
 
+    // Always allow the configured origin (same logic as /api/chat)
     const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
     const requestOrigin = request.headers.origin || ''
-    const corsOrigin = allowedOrigin === '*' ? '*'
-      : (requestOrigin === allowedOrigin ? requestOrigin : '')
+    const corsOrigin = (allowedOrigin === '*' || !allowedOrigin)
+      ? '*'
+      : requestOrigin === allowedOrigin ? requestOrigin : allowedOrigin
 
     reply.raw.writeHead(200, {
-      'Content-Type':                'text/event-stream',
-      'Cache-Control':               'no-cache, no-transform',
-      'Connection':                  'keep-alive',
-      'X-Accel-Buffering':           'no',
-      'Access-Control-Allow-Origin': corsOrigin
+      'Content-Type':                  'text/event-stream',
+      'Cache-Control':                 'no-cache, no-transform',
+      'Connection':                    'keep-alive',
+      'X-Accel-Buffering':             'no',
+      'Access-Control-Allow-Origin':   corsOrigin,
+      'Access-Control-Allow-Headers':  'Content-Type',
     })
 
     const raw = reply.raw
+
+    // Send an immediate connected event so the widget knows the stream is live
+    raw.write('data: {"type":"connected"}\n\n')
+
     subscribeWidget(sessionId, raw)
 
-    // Keepalive ping every 25s — prevents proxy/CDN closing idle connections
+    // Keepalive ping every 20s
     const ping = setInterval(() => {
-      try { raw.write('data: {"type":"ping"}\n\n') } catch { cleanup() }
-    }, 25000)
+      try {
+        raw.write('data: {"type":"ping"}\n\n')
+        // Explicitly flush for Node.js streams behind proxies
+        if (typeof raw.flush === 'function') raw.flush()
+      } catch { cleanup() }
+    }, 20000)
 
     function cleanup() {
       clearInterval(ping)

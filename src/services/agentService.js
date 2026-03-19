@@ -58,7 +58,10 @@ export function pushToWidget(sessionId, event) {
   if (!subs?.size) return
   const line = `data: ${JSON.stringify(event)}\n\n`
   for (const raw of subs) {
-    try { raw.write(line) } catch { subs.delete(raw) }
+    try {
+      raw.write(line)
+      if (typeof raw.flush === 'function') raw.flush()
+    } catch { subs.delete(raw) }
   }
 }
 
