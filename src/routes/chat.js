@@ -152,8 +152,6 @@ export default async function chatRoutes(fastify) {
     return reply.send({ sessionId, messages })
   })
 
-}
-
 
   /**
    * GET /api/chat/mode/:sessionId
@@ -214,4 +212,4 @@ export default async function chatRoutes(fastify) {
     raw.on('close', cleanup)
     raw.on('error', cleanup)
   })
-
+}
