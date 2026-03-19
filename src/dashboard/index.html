@@ -4,547 +4,572 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mediko — Agent Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#187adc;--primary-dk:#115fa8;--primary-lt:#e8f3fd;
+  --secondary:#ffb73a;--secondary-dk:#e09a1a;--secondary-lt:#fff8e8;
+  --bg:#f0f5fb;--surface:#ffffff;--surface2:#f7faff;--border:#d0e4f7;
+  --text:#1a2e4a;--muted:#6b85a3;
+  --green:#16a34a;--green-lt:#dcfce7;
+  --amber:#d97706;--amber-lt:#fef3c7;
+  --red:#dc2626;--red-lt:#fee2e2;
+}
+body{font-family:'Poppins',-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;font-size:14px;overflow:hidden}
 
-  :root {
-    --bg:       #0f1117;
-    --surface:  #1a1d27;
-    --surface2: #22263a;
-    --border:   #2e3350;
-    --text:     #e2e8f0;
-    --muted:    #8892a4;
-    --accent:   #4f8ef7;
-    --green:    #34d399;
-    --amber:    #fbbf24;
-    --red:      #f87171;
-    --teal:     #2dd4bf;
-  }
+/* HEADER */
+header{background:linear-gradient(135deg,#187adc 0%,#115fa8 100%);padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;box-shadow:0 2px 12px rgba(24,122,220,.25)}
+.logo{font-weight:700;font-size:17px;color:#fff;display:flex;align-items:center;gap:9px}
+.logo-icon{width:30px;height:30px;background:var(--secondary);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.header-right{display:flex;align-items:center;gap:20px}
+.stats-bar{display:flex;gap:24px}
+.stat{text-align:center}
+.stat-val{font-size:20px;font-weight:700;color:#fff;line-height:1}
+.stat-val.urgent{color:var(--secondary)}
+.stat-lbl{font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;font-weight:500;letter-spacing:.3px;text-transform:uppercase}
+.ws-pill{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:500;color:rgba(255,255,255,.85)}
+.ws-dot{width:7px;height:7px;border-radius:50%;background:#f87171;transition:background .3s}
+.ws-dot.on{background:#4ade80}
 
-  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; font-size: 14px; }
+/* TAB NAV */
+.tab-nav{background:var(--surface);border-bottom:2px solid var(--border);display:flex;padding:0 24px;gap:4px;flex-shrink:0}
+.tab-btn{padding:13px 20px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;background:transparent;border:none;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;display:flex;align-items:center;gap:7px}
+.tab-btn:hover{color:var(--primary)}
+.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab-count{background:var(--primary-lt);color:var(--primary);font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}
+.tab-count.urgent{background:var(--amber-lt);color:var(--amber)}
 
-  /* ── Header ── */
-  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; height: 52px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-  .logo  { font-weight: 700; font-size: 16px; color: var(--accent); letter-spacing: -.3px; }
-  .header-right { display: flex; align-items: center; gap: 16px; }
-  .ws-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-  .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); transition: background .3s; }
-  .ws-dot.connected { background: var(--green); }
-  .stats-bar { display: flex; gap: 20px; }
-  .stat { text-align: center; }
-  .stat-val { font-size: 18px; font-weight: 700; color: var(--text); line-height: 1; }
-  .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .stat-val.urgent { color: var(--amber); }
+/* BODY */
+.tab-body{flex:1;overflow:hidden;display:none}
+.tab-body.active{display:flex}
 
-  /* ── Layout ── */
-  .layout { display: flex; flex: 1; overflow: hidden; }
+/* SIDEBAR */
+.sidebar{width:310px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-top{padding:14px 16px;border-bottom:1px solid var(--border)}
+.sidebar-title{font-weight:600;font-size:14px;color:var(--text)}
+.search-input{margin:10px 12px;padding:9px 13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;color:var(--text);outline:none;width:calc(100% - 24px);transition:border-color .2s}
+.search-input:focus{border-color:var(--primary)}
+.search-input::placeholder{color:var(--muted)}
+.session-list{flex:1;overflow-y:auto}
 
-  /* ── Session list ── */
-  .sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-  .sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-  .sidebar-title { font-weight: 600; font-size: 13px; }
-  .filter-tabs { display: flex; gap: 4px; }
-  .filter-tab { padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; background: transparent; color: var(--muted); border: 1px solid transparent; transition: all .15s; }
-  .filter-tab.active { background: var(--accent); color: #fff; }
-  .session-list { flex: 1; overflow-y: auto; }
-  .session-item { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; display: flex; flex-direction: column; gap: 4px; }
-  .session-item:hover { background: var(--surface2); }
-  .session-item.active { background: var(--surface2); border-left: 3px solid var(--accent); padding-left: 13px; }
-  .session-item.handoff { border-left: 3px solid var(--amber); padding-left: 13px; }
-  .session-meta { display: flex; align-items: center; justify-content: space-between; }
-  .session-id { font-size: 12px; font-weight: 600; color: var(--text); font-family: monospace; }
-  .session-time { font-size: 11px; color: var(--muted); }
-  .session-info { display: flex; align-items: center; gap: 6px; }
-  .badge { padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 500; }
-  .badge-agent    { background: #2d3748; color: var(--amber); }
-  .badge-ai       { background: #1a2e1a; color: var(--green); }
-  .badge-widget   { background: #1a2036; color: var(--accent); }
-  .badge-whatsapp { background: #1a2e24; color: var(--teal); }
-  .badge-messenger{ background: #2a1a36; color: #a78bfa; }
-  .session-preview { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pulse { animation: pulse 1.5s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+/* SESSION ITEMS */
+.session-item{padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;align-items:flex-start;gap:11px;position:relative}
+.session-item:hover{background:var(--surface2)}
+.session-item.active{background:var(--primary-lt);border-left:3px solid var(--primary);padding-left:13px}
+.session-item.needs-agent{border-left:3px solid var(--secondary);padding-left:13px}
+.ch-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;font-weight:700}
+.ch-avatar.widget{background:var(--primary-lt);color:var(--primary)}
+.ch-avatar.whatsapp{background:#dcfce7;color:#15803d}
+.ch-avatar.messenger{background:#ede9fe;color:#7c3aed}
+.session-body{flex:1;min-width:0}
+.session-row1{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.session-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.session-time{font-size:11px;color:var(--muted);flex-shrink:0}
+.session-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px}
+.session-tags{display:flex;gap:5px}
+.tag{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:.2px}
+.tag-ai{background:var(--green-lt);color:var(--green)}
+.tag-agent{background:var(--amber-lt);color:var(--amber)}
+.tag-waiting{background:var(--amber-lt);color:var(--amber);animation:tagPulse 1.5s ease infinite}
+@keyframes tagPulse{0%,100%{opacity:1}50%{opacity:.55}}
+.unread-dot{position:absolute;top:14px;right:12px;width:8px;height:8px;border-radius:50%;background:var(--primary)}
 
-  /* ── Chat panel ── */
-  .chat-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-  .chat-header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: var(--surface); }
-  .chat-session-info { display: flex; flex-direction: column; gap: 2px; }
-  .chat-session-id { font-size: 13px; font-weight: 600; font-family: monospace; }
-  .chat-session-meta { font-size: 12px; color: var(--muted); }
-  .chat-actions { display: flex; gap: 8px; }
-  .btn { padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
-  .btn-takeover  { background: var(--amber); color: #000; }
-  .btn-return    { background: var(--surface2); color: var(--green); border: 1px solid var(--green); }
-  .btn-takeover:hover { opacity: .85; }
-  .btn-return:hover   { opacity: .85; }
-  .btn:disabled { opacity: .4; cursor: default; }
+/* CHAT PANEL */
+.chat-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.chat-top{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.chat-info{display:flex;align-items:center;gap:11px}
+.chat-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;background:var(--primary-lt);color:var(--primary);flex-shrink:0}
+.chat-name{font-size:14px;font-weight:600;color:var(--text)}
+.chat-meta{font-size:12px;color:var(--muted);margin-top:1px}
+.chat-btns{display:flex;gap:8px}
+.btn{padding:8px 16px;border-radius:10px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;border:none;transition:all .2s}
+.btn-takeover{background:var(--secondary);color:#1a2e4a}
+.btn-takeover:hover{background:var(--secondary-dk);transform:translateY(-1px)}
+.btn-return{background:var(--green-lt);color:var(--green);border:1.5px solid #86efac}
+.btn-return:hover{background:#bbf7d0;transform:translateY(-1px)}
+.btn:disabled{opacity:.4;cursor:default;transform:none!important}
 
-  /* ── Messages ── */
-  .messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
-  .msg { max-width: 75%; display: flex; flex-direction: column; gap: 3px; }
-  .msg.user { align-self: flex-end; align-items: flex-end; }
-  .msg.assistant { align-self: flex-start; align-items: flex-start; }
-  .msg-bubble { padding: 9px 13px; border-radius: 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-  .msg.user .msg-bubble      { background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
-  .msg.assistant .msg-bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 3px; }
-  .msg.agent .msg-bubble     { background: #2d2a12; color: var(--amber); border: 1px solid #4a4010; border-bottom-left-radius: 3px; }
-  .msg-time { font-size: 11px; color: var(--muted); }
-  .msg-label { font-size: 11px; color: var(--amber); font-weight: 600; }
+/* MESSAGES */
+.messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+.date-divider{text-align:center;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.date-divider::before,.date-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.msg{display:flex;flex-direction:column;max-width:72%}
+.msg.user{align-self:flex-end;align-items:flex-end}
+.msg.assistant,.msg.agent-msg{align-self:flex-start;align-items:flex-start}
+.msg-sender{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;padding:0 4px}
+.msg-sender.medi{color:var(--primary)}
+.msg-sender.agent{color:var(--amber)}
+.msg-bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.msg.user .msg-bubble{background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border-bottom-right-radius:4px;box-shadow:0 2px 8px rgba(24,122,220,.2)}
+.msg.assistant .msg-bubble{background:var(--surface);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg.agent-msg .msg-bubble{background:var(--amber-lt);color:#7c4a00;border:1px solid #fcd34d;border-bottom-left-radius:4px}
+.msg-foot{font-size:11px;color:var(--muted);margin-top:4px;padding:0 4px}
 
-  /* ── Agent reply box ── */
-  .reply-bar { padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
-  .reply-bar.hidden { display: none; }
-  .reply-inner { display: flex; gap: 10px; align-items: flex-end; }
-  .reply-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 14px; resize: none; min-height: 42px; max-height: 120px; outline: none; font-family: inherit; }
-  .reply-input:focus { border-color: var(--accent); }
-  .btn-send { background: var(--accent); color: #fff; padding: 10px 18px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
-  .btn-send:hover { opacity: .85; }
-  .reply-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+/* REPLY BAR */
+.reply-bar{background:var(--surface);border-top:1px solid var(--border);padding:12px 16px;flex-shrink:0}
+.reply-bar.hidden{display:none}
+.reply-inner{display:flex;gap:10px;align-items:flex-end}
+.reply-input{flex:1;background:var(--surface2);border:1.5px solid var(--border);border-radius:14px;padding:10px 14px;color:var(--text);font-size:14px;font-family:'Poppins',sans-serif;resize:none;min-height:44px;max-height:120px;outline:none;transition:border-color .2s}
+.reply-input:focus{border-color:var(--primary)}
+.reply-input::placeholder{color:var(--muted)}
+.btn-send{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--secondary),#ffd815);color:#1a2e4a;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(255,183,58,.4);flex-shrink:0}
+.btn-send:hover{transform:scale(1.08);box-shadow:0 5px 14px rgba(255,183,58,.5)}
+.reply-hint{font-size:11px;color:var(--muted);margin-top:6px}
 
-  /* ── Empty state ── */
-  .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
-  .empty-icon { font-size: 36px; opacity: .4; }
-  .empty-title { font-size: 15px; font-weight: 500; }
-  .empty-sub { font-size: 13px; }
+/* EMPTY */
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted)}
+.empty-icon{font-size:48px;opacity:.4}
+.empty-title{font-size:16px;font-weight:600;color:var(--text)}
+.empty-sub{font-size:13px}
 
-  /* ── Toast ── */
-  .toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 100; }
-  .toast { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 13px; max-width: 300px; animation: slideIn .2s ease; }
-  .toast.success { border-color: var(--green); color: var(--green); }
-  .toast.error   { border-color: var(--red);   color: var(--red); }
-  .toast.info    { border-color: var(--accent); color: var(--accent); }
-  .toast.warning { border-color: var(--amber);  color: var(--amber); }
-  @keyframes slideIn { from { transform: translateX(20px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+/* KEYWORDS TAB */
+.kw-layout{flex:1;display:flex;flex-direction:column;overflow-y:auto;padding:20px;gap:16px;background:var(--bg)}
+.kw-add-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;flex-shrink:0}
+.kw-add-card h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:14px}
+.kw-form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.kw-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:160px}
+.kw-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.kw-input{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-size:13px;font-family:'Poppins',sans-serif;outline:none;transition:border-color .2s;width:100%}
+.kw-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(24,122,220,.1)}
+.kw-input::placeholder{color:var(--muted)}
+.kw-select{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-size:13px;font-family:'Poppins',sans-serif;outline:none;cursor:pointer;width:100%}
+.btn-add-kw{background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(24,122,220,.3);white-space:nowrap;height:40px;align-self:flex-end}
+.btn-add-kw:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(24,122,220,.4)}
+.kw-hint{font-size:11px;color:var(--muted);margin-top:8px}
+.kw-table-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;flex-shrink:0}
+.kw-table-head{display:grid;grid-template-columns:1fr 1fr 100px 70px 70px;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.kw-row-item{display:grid;grid-template-columns:1fr 1fr 100px 70px 70px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;transition:background .15s}
+.kw-row-item:last-child{border-bottom:none}
+.kw-row-item:hover{background:var(--surface2)}
+.kw-code{font-family:'Courier New',monospace;font-size:12px;background:var(--surface2);padding:3px 8px;border-radius:6px;color:var(--text);display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kw-code.term{color:var(--primary);background:var(--primary-lt)}
+.kw-badge{padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600;display:inline-block}
+.kw-badge.health{background:var(--green-lt);color:var(--green)}
+.kw-badge.product{background:var(--primary-lt);color:var(--primary)}
+.kw-badge.other{background:var(--surface2);color:var(--muted)}
+.kw-toggle{width:36px;height:20px;border-radius:10px;background:#d1d5db;position:relative;cursor:pointer;transition:background .2s;border:none;flex-shrink:0}
+.kw-toggle.on{background:var(--primary)}
+.kw-toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.kw-toggle.on::after{transform:translateX(16px)}
+.btn-del-kw{background:transparent;border:1px solid #fca5a5;color:var(--red);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
+.btn-del-kw:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.kw-empty{padding:40px;text-align:center;color:var(--muted);font-size:13px}
 
-  /* ── Tab nav ── */
-  .tab-nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; padding: 0 20px; flex-shrink: 0; }
-  .tab { padding: 12px 20px; font-size: 13px; font-weight: 500; cursor: pointer; background: transparent; border: none; color: var(--muted); border-bottom: 2px solid transparent; transition: all .15s; }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+/* TOAST */
+.toast-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999}
+.toast{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:11px 16px;font-size:13px;font-weight:500;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.1);animation:toastIn .2s ease;font-family:'Poppins',sans-serif}
+.toast.success{border-color:#86efac;color:var(--green)}
+.toast.error{border-color:#fca5a5;color:var(--red)}
+.toast.info{border-color:var(--border);color:var(--primary)}
+.toast.warning{border-color:#fcd34d;color:var(--amber)}
+@keyframes toastIn{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
 
-  /* ── Keywords panel ── */
-  .kw-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
-  .kw-panel.visible { display: flex; }
-  .kw-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface); flex-shrink: 0; }
-  .kw-title { font-weight: 600; font-size: 15px; }
-  .kw-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
-  .kw-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .kw-table th { text-align: left; padding: 8px 12px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); }
-  .kw-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-  .kw-table tr:hover td { background: var(--surface2); }
-  .kw-tag { padding: 2px 8px; border-radius: 10px; font-size: 11px; background: var(--surface2); color: var(--muted); }
-  .kw-tag.product { color: var(--accent); }
-  .kw-tag.health  { color: var(--green); }
-  .toggle-active { cursor: pointer; }
-  .kw-add-form { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-  .kw-add-form h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-  .kw-row { display: flex; gap: 10px; flex-wrap: wrap; }
-  .kw-input { flex: 1; min-width: 140px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; outline: none; }
-  .kw-input:focus { border-color: var(--accent); }
-  .kw-select { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
-  .btn-add-kw { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; }
-  .btn-add-kw:hover { opacity: .85; }
-  .btn-del-kw { background: transparent; border: 1px solid var(--red); color: var(--red); border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
-  .btn-del-kw:hover { background: var(--red); color: #fff; }
-  .hint { font-size: 11px; color: var(--muted); }
+/* QUICK REPLIES TAB — reuses keyword styles */
+.qr-layout{flex:1;display:flex;flex-direction:column;overflow-y:auto;padding:20px;gap:16px;background:var(--bg)}
+.qr-add-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;flex-shrink:0}
+.qr-add-card h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:14px}
+.qr-form-col{display:flex;flex-direction:column;gap:10px}
+.qr-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.qr-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:180px}
+.qr-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.qr-input{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-size:13px;font-family:'Poppins',sans-serif;outline:none;transition:border-color .2s;width:100%}
+.qr-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(24,122,220,.1)}
+.qr-input::placeholder{color:var(--muted)}
+.btn-add-qr{background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(24,122,220,.3);white-space:nowrap;height:40px;align-self:flex-end}
+.btn-add-qr:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(24,122,220,.4)}
+.qr-hint{font-size:11px;color:var(--muted);margin-top:6px}
+.qr-table-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;flex-shrink:0}
+.qr-table-head{display:grid;grid-template-columns:1fr 1fr 60px 70px 70px;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.qr-row-item{display:grid;grid-template-columns:1fr 1fr 60px 70px 70px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;transition:background .15s;gap:8px}
+.qr-row-item:last-child{border-bottom:none}
+.qr-row-item:hover{background:var(--surface2)}
+.qr-label-text{font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qr-msg-text{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Courier New',monospace}
+.qr-order{font-size:12px;color:var(--muted);text-align:center}
+.qr-empty{padding:40px;text-align:center;color:var(--muted);font-size:13px}
 
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+/* UNREAD BADGE on session items */
+.session-unread{position:absolute;top:12px;right:10px;background:var(--primary);color:#fff;font-size:10px;font-weight:700;border-radius:10px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px;animation:badgePop .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#b0c8e8}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">Mediko Agent Dashboard</div>
+  <div class="logo"><div class="logo-icon">🌿</div>Mediko Agent Dashboard</div>
   <div class="header-right">
-    <div class="stats-bar" id="stats-bar">
-      <div class="stat"><div class="stat-val" id="stat-total">—</div><div class="stat-lbl">Total sessions</div></div>
-      <div class="stat"><div class="stat-val urgent" id="stat-waiting">—</div><div class="stat-lbl">Waiting for agent</div></div>
+    <div class="stats-bar">
+      <div class="stat"><div class="stat-val" id="stat-total">—</div><div class="stat-lbl">Total</div></div>
+      <div class="stat"><div class="stat-val urgent" id="stat-waiting">—</div><div class="stat-lbl">Waiting</div></div>
       <div class="stat"><div class="stat-val" id="stat-today">—</div><div class="stat-lbl">Today</div></div>
     </div>
-    <div class="ws-status">
-      <div class="ws-dot" id="ws-dot"></div>
-      <span id="ws-label">Connecting...</span>
-    </div>
+    <div class="ws-pill"><div class="ws-dot" id="ws-dot"></div><span id="ws-label">Connecting...</span></div>
   </div>
 </header>
 
 <nav class="tab-nav">
-  <button class="tab active" onclick="showTab('sessions')">Sessions</button>
-  <button class="tab" onclick="showTab('keywords')">Keywords</button>
+  <button class="tab-btn active" id="tab-btn-sessions" onclick="showTab('sessions')">
+    💬 Sessions <span class="tab-count" id="tab-count-sessions">0</span>
+  </button>
+  <button class="tab-btn" id="tab-btn-keywords" onclick="showTab('keywords')">
+    🔑 Keywords <span class="tab-count" id="tab-count-keywords">0</span>
+  </button>
+  <button class="tab-btn" id="tab-btn-quickreplies" onclick="showTab('quickreplies')">
+    ⚡ Quick Replies <span class="tab-count" id="tab-count-qr">0</span>
+  </button>
 </nav>
-<div id="tab-sessions" class="tab-content" style="flex:1;overflow:hidden;display:flex;">
-<div class="layout">
 
-  <!-- Session list -->
+<!-- SESSIONS -->
+<div class="tab-body active" id="tab-sessions">
   <aside class="sidebar">
-    <div class="sidebar-header">
-      <span class="sidebar-title">Sessions</span>
-      <div class="filter-tabs">
-        <button class="filter-tab active" data-filter="all"    onclick="setFilter('all')">All</button>
-        <button class="filter-tab"        data-filter="agent"  onclick="setFilter('agent')">Agent</button>
-        <button class="filter-tab"        data-filter="ai"     onclick="setFilter('ai')">AI</button>
-      </div>
-    </div>
+    <div class="sidebar-top"><span class="sidebar-title">Conversations</span></div>
+    <input class="search-input" id="search-input" type="text" placeholder="🔍  Search sessions..." oninput="filterSessions(this.value)">
     <div class="session-list" id="session-list">
-      <div class="empty" style="padding:40px 0">
-        <div class="empty-icon">○</div>
-        <div class="empty-title">Loading sessions...</div>
-      </div>
+      <div class="empty" style="padding:48px 0"><div class="empty-icon">💬</div><div class="empty-sub">Loading...</div></div>
     </div>
   </aside>
-
-  <!-- Chat panel -->
-  <main class="chat-panel" id="chat-panel">
+  <main class="chat-panel">
     <div class="empty" id="empty-state">
-      <div class="empty-icon">◎</div>
-      <div class="empty-title">Select a session</div>
-      <div class="empty-sub">Choose a conversation from the left to view it</div>
+      <div class="empty-icon">👈</div>
+      <div class="empty-title">Select a conversation</div>
+      <div class="empty-sub">Choose a session from the left</div>
     </div>
-
-    <div id="chat-view" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
-      <div class="chat-header">
-        <div class="chat-session-info">
-          <div class="chat-session-id" id="cv-session-id">—</div>
-          <div class="chat-session-meta" id="cv-session-meta">—</div>
+    <div id="chat-view" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+      <div class="chat-top">
+        <div class="chat-info">
+          <div class="chat-avatar" id="cv-avatar">💬</div>
+          <div><div class="chat-name" id="cv-name">—</div><div class="chat-meta" id="cv-meta">—</div></div>
         </div>
-        <div class="chat-actions" id="cv-actions"></div>
+        <div class="chat-btns" id="cv-actions"></div>
       </div>
       <div class="messages" id="cv-messages"></div>
-    </div>
-
-    <div class="reply-bar hidden" id="reply-bar">
-      <div class="reply-inner">
-        <textarea class="reply-input" id="reply-input" placeholder="Type a reply as agent..." rows="1"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentReply()}"
-          oninput="autoResize(this)"></textarea>
-        <button class="btn btn-send" onclick="sendAgentReply()">Send</button>
+      <div class="reply-bar hidden" id="reply-bar">
+        <div class="reply-inner">
+          <textarea class="reply-input" id="reply-input" placeholder="Type your reply as agent..." rows="1"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentReply()}"
+            oninput="autoResize(this)"></textarea>
+          <button class="btn-send" onclick="sendAgentReply()" title="Send">➤</button>
+        </div>
+        <div class="reply-hint">Enter to send · Shift+Enter for new line</div>
       </div>
-      <div class="reply-hint">Enter to send · Shift+Enter for new line</div>
     </div>
   </main>
-
-</div>
 </div>
 
-<!-- Keywords tab -->
-<div id="tab-keywords" class="tab-content kw-panel">
-  <div class="kw-header">
-    <span class="kw-title">Search Keywords</span>
-    <span class="hint">Keywords trigger Shopify product searches when customers message Medi</span>
-  </div>
-  <div class="kw-body">
-    <div class="kw-add-form">
-      <h4>Add keyword</h4>
-      <div class="kw-row">
-        <input class="kw-input" id="kw-pattern" placeholder="Trigger word/phrase (e.g. genacol, kasukasuan)">
-        <input class="kw-input" id="kw-term" placeholder="Shopify search term (e.g. genacol, collagen)">
-        <select class="kw-select" id="kw-cat"><option value="health">health</option><option value="product">product</option><option value="other">other</option></select>
-        <button class="btn-add-kw" onclick="addKeyword()">Add</button>
+<!-- KEYWORDS -->
+<div class="tab-body" id="tab-keywords">
+  <div class="kw-layout">
+    <div class="kw-add-card">
+      <h3>➕ Add keyword</h3>
+      <div class="kw-form-row">
+        <div class="kw-field">
+          <label class="kw-label">Trigger pattern</label>
+          <input class="kw-input" id="kw-pattern" placeholder="e.g. genacol, kasukasuan">
+        </div>
+        <div class="kw-field">
+          <label class="kw-label">Shopify search term</label>
+          <input class="kw-input" id="kw-term" placeholder="e.g. genacol, collagen">
+        </div>
+        <div class="kw-field" style="flex:0;min-width:130px">
+          <label class="kw-label">Category</label>
+          <select class="kw-select" id="kw-cat">
+            <option value="health">health</option>
+            <option value="product">product</option>
+            <option value="other">other</option>
+          </select>
+        </div>
+        <button class="btn-add-kw" onclick="addKeyword()">Add keyword</button>
       </div>
-      <div class="hint">Pattern: what customer types &nbsp;|&nbsp; Search term: what gets sent to Shopify</div>
+      <div class="kw-hint"><strong>Pattern</strong> = what customer types &nbsp;·&nbsp; <strong>Search term</strong> = what gets sent to Shopify</div>
     </div>
-    <table class="kw-table">
-      <thead><tr><th>Pattern</th><th>Shopify search term</th><th>Category</th><th>Active</th><th></th></tr></thead>
-      <tbody id="kw-tbody"></tbody>
-    </table>
+    <div class="kw-table-card">
+      <div class="kw-table-head">
+        <span>Pattern</span><span>Shopify search term</span><span>Category</span><span>Active</span><span></span>
+      </div>
+      <div id="kw-list"><div class="kw-empty">Loading keywords...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- QUICK REPLIES -->
+<div class="tab-body" id="tab-quickreplies">
+  <div class="qr-layout">
+    <div class="qr-add-card">
+      <h3>⚡ Add quick reply button</h3>
+      <div class="qr-form-col">
+        <div class="qr-row">
+          <div class="qr-field">
+            <label class="qr-label">Button label (shown in widget)</label>
+            <input class="qr-input" id="qr-label" placeholder="e.g. Para sa immunity">
+          </div>
+          <div class="qr-field">
+            <label class="qr-label">Message sent when clicked</label>
+            <input class="qr-input" id="qr-message" placeholder="e.g. May pang-immunity ba kayong supplement?">
+          </div>
+          <div class="qr-field" style="flex:0;min-width:80px">
+            <label class="qr-label">Order</label>
+            <input class="qr-input" id="qr-order" type="number" value="0" min="0" style="width:80px">
+          </div>
+          <button class="btn-add-qr" onclick="addQuickReply()">Add</button>
+        </div>
+        <div class="qr-hint">
+          <strong>Tip:</strong> The label is the button text in the widget. The message is what actually gets sent to Medi when the customer clicks it. They can be different — e.g. label "Para sa joints" → message "May supplement para sa kasukasuan?"
+        </div>
+      </div>
+    </div>
+    <div class="qr-table-card">
+      <div class="qr-table-head">
+        <span>Button label</span><span>Message sent</span><span>Order</span><span>Active</span><span></span>
+      </div>
+      <div id="qr-list"><div class="qr-empty">Loading...</div></div>
+    </div>
   </div>
 </div>
 
 <div class="toast-container" id="toasts"></div>
 
 <script>
-const API     = ''   // same origin
-const WS_URL  = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/agent/ws`
-const SECRET  = new URLSearchParams(location.search).get('secret') ?? ''
+const API='', SECRET=new URLSearchParams(location.search).get('secret')??''
+const WS_URL=`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/agent/ws`
+let ws=null,currentSessionId=null,allSessions=[],wsReconnectTimer=null,kwData=[],qrData=[]
+const unreadCounts={} // sessionId → unread count
 
-let ws               = null
-let currentSessionId = null
-let sessions         = {}   // id → session object
-let currentFilter    = 'all'
-let wsReconnectTimer = null
-
-// ── WebSocket ──────────────────────────────────────────────
-
-function connectWs() {
-  if (ws) { ws.onclose = null; ws.close() }
-
-  ws = new WebSocket(WS_URL)
-
-  ws.onopen = () => {
-    setWsStatus(true)
-    clearTimeout(wsReconnectTimer)
-    loadSessions()
-    loadStats()
-  }
-
-  ws.onmessage = ({ data }) => {
-    try { handleWsEvent(JSON.parse(data)) } catch {}
-  }
-
-  ws.onclose = () => {
-    setWsStatus(false)
-    wsReconnectTimer = setTimeout(connectWs, 3000)
-  }
-
-  ws.onerror = () => ws.close()
+// TAB SWITCHING
+function showTab(name){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.id===`tab-btn-${name}`))
+  document.querySelectorAll('.tab-body').forEach(b=>b.classList.toggle('active',b.id===`tab-${name}`))
+  if(name==='keywords')loadKeywords()
+  if(name==='quickreplies')loadQuickReplies()
 }
 
-function setWsStatus(online) {
-  document.getElementById('ws-dot').classList.toggle('connected', online)
-  document.getElementById('ws-label').textContent = online ? 'Connected' : 'Reconnecting...'
+// WEBSOCKET
+function connectWs(){
+  if(ws){ws.onclose=null;ws.close()}
+  ws=new WebSocket(WS_URL)
+  ws.onopen=()=>{setWsStatus(true);clearTimeout(wsReconnectTimer);loadSessions();loadStats()}
+  ws.onmessage=({data})=>{try{handleWsEvent(JSON.parse(data))}catch{}}
+  ws.onclose=()=>{setWsStatus(false);wsReconnectTimer=setTimeout(connectWs,3000)}
+  ws.onerror=()=>ws.close()
 }
-
-function sendWs(payload) {
-  if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(payload))
-  } else {
-    toast('Not connected to server', 'error')
+function setWsStatus(on){
+  document.getElementById('ws-dot').classList.toggle('on',on)
+  document.getElementById('ws-label').textContent=on?'Connected':'Reconnecting...'
+}
+function sendWs(p){ws?.readyState===1?ws.send(JSON.stringify(p)):toast('Not connected','error')}
+function handleWsEvent(e){
+  if(e.type==='handoff_requested'){
+    toast(`Handoff — ${e.channel}`,'warning')
+    if(e.sessionId!==currentSessionId){unreadCounts[e.sessionId]=(unreadCounts[e.sessionId]||0)+1}
+    loadSessions();loadStats()
+  } else if(e.type==='customer_message'){
+    if(e.sessionId===currentSessionId)refreshCurrentSession()
+    else{unreadCounts[e.sessionId]=(unreadCounts[e.sessionId]||0)+1;loadSessions()}
+  } else if(['mode_changed','agent_sent'].includes(e.type)){
+    loadSessions();loadStats()
+    if(e.sessionId===currentSessionId)refreshCurrentSession()
   }
 }
 
-// ── WS Event handler ───────────────────────────────────────
-
-function handleWsEvent(evt) {
-  switch (evt.type) {
-
-    case 'handoff_requested':
-      toast(`Handoff requested — ${evt.channel} · ${shortId(evt.sessionId)}`, 'warning')
-      loadSessions()
-      loadStats()
-      if (evt.sessionId === currentSessionId) refreshCurrentSession()
-      break
-
-    case 'customer_message':
-      if (evt.sessionId === currentSessionId) refreshCurrentSession()
-      else loadSessions()
-      break
-
-    case 'mode_changed':
-      loadSessions()
-      loadStats()
-      if (evt.sessionId === currentSessionId) refreshCurrentSession()
-      break
-
-    case 'agent_sent':
-      if (evt.sessionId === currentSessionId) refreshCurrentSession()
-      break
-
-    case 'connected':
-      // server ack — already handled by ws.onopen
-      break
-  }
+// SESSIONS
+async function loadSessions(){
+  const r=await apiFetch('/api/admin/sessions?limit=60');if(!r)return
+  allSessions=r.sessions||[]
+  document.getElementById('tab-count-sessions').textContent=allSessions.length
+  renderSessionList(allSessions)
 }
-
-// ── Sessions ───────────────────────────────────────────────
-
-async function loadSessions() {
-  const filter = currentFilter === 'all' ? '' : `?mode=${currentFilter}`
-  const res    = await apiFetch(`/api/admin/sessions${filter}&limit=50`)
-  if (!res) return
-
-  sessions = {}
-  res.sessions?.forEach(s => sessions[s.id] = s)
-  renderSessionList(res.sessions || [])
+function filterSessions(q){
+  const l=q.toLowerCase()
+  renderSessionList(q?allSessions.filter(s=>s.id.includes(l)||s.channel?.includes(l)||s.customer_email?.toLowerCase().includes(l)||s.channel_user_id?.toLowerCase().includes(l)):allSessions)
 }
-
-function setFilter(f) {
-  currentFilter = f
-  document.querySelectorAll('.filter-tab').forEach(t =>
-    t.classList.toggle('active', t.dataset.filter === f)
-  )
-  loadSessions()
-}
-
-function renderSessionList(list) {
-  const el = document.getElementById('session-list')
-  if (!list.length) {
-    el.innerHTML = `<div class="empty" style="padding:40px 0">
-      <div class="empty-icon">○</div>
-      <div class="empty-title">No sessions</div>
-    </div>`
-    return
-  }
-
-  el.innerHTML = list.map(s => {
-    const isHandoff = s.mode === 'agent' && !s.assigned_agent
-    const isActive  = s.id === currentSessionId
-    const classes   = ['session-item', isActive ? 'active' : '', isHandoff ? 'handoff' : ''].join(' ').trim()
-    const time      = relativeTime(s.last_active)
-    const modeBadge = `<span class="badge badge-${s.mode}">${s.mode === 'agent' ? '⚡ Agent' : '◆ AI'}</span>`
-    const chanBadge = `<span class="badge badge-${s.channel}">${s.channel}</span>`
-    const pulseIcon = isHandoff ? '<span class="pulse" style="color:var(--amber)">●</span> ' : ''
-
-    return `<div class="${classes}" onclick="openSession('${s.id}')">
-      <div class="session-meta">
-        <span class="session-id">${pulseIcon}${shortId(s.id)}</span>
-        <span class="session-time">${time}</span>
+const CHICO={widget:'💬',whatsapp:'📱',messenger:'💙'}
+function renderSessionList(list){
+  const el=document.getElementById('session-list')
+  if(!list.length){el.innerHTML='<div class="empty" style="padding:48px 0"><div class="empty-icon">🔍</div><div class="empty-sub">No sessions</div></div>';return}
+  el.innerHTML=list.map(s=>{
+    const icon=CHICO[s.channel]||'💬'
+    const name=s.customer_email||s.channel_user_id||shortId(s.id)
+    const needsAgent=s.mode==='agent'&&!s.assigned_agent
+    const tag=s.mode==='agent'?(needsAgent?'<span class="tag tag-waiting">⚡ Needs agent</span>':'<span class="tag tag-agent">👤 Agent</span>'):'<span class="tag tag-ai">🤖 AI</span>'
+    return `<div class="session-item${s.id===currentSessionId?' active':''}${needsAgent?' needs-agent':''}" onclick="openSession('${s.id}')">
+      <div class="ch-avatar ${s.channel}">${icon}</div>
+      <div class="session-body">
+        <div class="session-row1"><span class="session-name">${escHtml(name)}</span><span class="session-time">${relativeTime(s.last_active)}</span></div>
+        <div class="session-preview">${s.channel} · ${shortId(s.id)}</div>
+        <div class="session-tags">${tag}</div>
       </div>
-      <div class="session-info">${modeBadge}${chanBadge}</div>
-      ${s.customer_email ? `<div class="session-preview">${s.customer_email}</div>` : ''}
+      ${unreadCounts[s.id]?`<div class="session-unread">${unreadCounts[s.id]>9?'9+':unreadCounts[s.id]}</div>`:(needsAgent?'<div class="unread-dot"></div>':'')}
     </div>`
   }).join('')
 }
 
-// ── Session detail ─────────────────────────────────────────
-
-async function openSession(id) {
-  currentSessionId = id
-  document.getElementById('empty-state').style.display = 'none'
-  const chatView = document.getElementById('chat-view')
-  chatView.style.display = 'flex'
-
-  // Highlight in list
-  document.querySelectorAll('.session-item').forEach(el => {
-    el.classList.toggle('active', el.onclick?.toString().includes(id))
-  })
-
+// SESSION DETAIL
+async function openSession(id){
+  currentSessionId=id
+  delete unreadCounts[id]
+  document.getElementById('empty-state').style.display='none'
+  const cv=document.getElementById('chat-view');cv.style.display='flex'
+  document.querySelectorAll('.session-item').forEach(el=>el.classList.toggle('active',el.getAttribute('onclick')?.includes(`'${id}'`)))
   await refreshCurrentSession()
 }
-
-async function refreshCurrentSession() {
-  if (!currentSessionId) return
-  const res = await apiFetch(`/api/admin/sessions/${currentSessionId}`)
-  if (!res) return
-
-  const { session, messages } = res
-
-  document.getElementById('cv-session-id').textContent =
-    `${shortId(session.id)} · ${session.channel}`
-
-  document.getElementById('cv-session-meta').textContent =
-    [
-      session.customer_email,
-      session.channel_user_id,
-      `Mode: ${session.mode}`,
-      session.assigned_agent ? `Agent: ${session.assigned_agent}` : null,
-      session.handoff_at ? `Handoff: ${relativeTime(session.handoff_at)}` : null
-    ].filter(Boolean).join(' · ')
-
+async function refreshCurrentSession(){
+  if(!currentSessionId)return
+  const r=await apiFetch(`/api/admin/sessions/${currentSessionId}`);if(!r)return
+  const{session,messages}=r
+  document.getElementById('cv-avatar').textContent=CHICO[session.channel]||'💬'
+  document.getElementById('cv-name').textContent=session.customer_email||session.channel_user_id||shortId(session.id)
+  document.getElementById('cv-meta').textContent=[session.channel,`Mode: ${session.mode}`,session.assigned_agent?`Agent: ${session.assigned_agent}`:null,session.handoff_at?`Handoff: ${relativeTime(session.handoff_at)}`:null].filter(Boolean).join(' · ')
   renderMessages(messages)
-  renderActions(session)
-  renderReplyBar(session)
+  document.getElementById('cv-actions').innerHTML=session.mode==='ai'
+    ?`<button class="btn btn-takeover" onclick="takeOver()">⚡ Take over</button>`
+    :`<button class="btn btn-return" onclick="returnToAi()">🤖 Return to AI</button>`
+  document.getElementById('reply-bar').classList.toggle('hidden',session.mode!=='agent')
 }
-
-function renderMessages(messages) {
-  const el = document.getElementById('cv-messages')
-  if (!messages.length) {
-    el.innerHTML = '<div class="empty" style="padding:40px 0"><div class="empty-sub">No messages yet</div></div>'
-    return
-  }
-
-  el.innerHTML = messages.map(m => {
-    const isAgent = m.content?.startsWith('[Agent]')
-    const cls     = isAgent ? 'agent' : m.role
-    const content = isAgent ? m.content.replace('[Agent] ', '') : m.content
-    const label   = isAgent ? '<div class="msg-label">Agent reply</div>' : ''
-    const time    = new Date(m.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
-    return `<div class="msg ${cls}">
-      ${label}
-      <div class="msg-bubble">${escHtml(content)}</div>
-      <div class="msg-time">${time}${m.tokens_used ? ` · ${m.tokens_used} tokens` : ''}</div>
-    </div>`
+function renderMessages(msgs){
+  const el=document.getElementById('cv-messages')
+  if(!msgs.length){el.innerHTML='<div class="empty" style="height:100%"><div class="empty-sub">No messages yet</div></div>';return}
+  let lastDate=null
+  el.innerHTML=msgs.map(m=>{
+    const isAgent=m.content?.startsWith('[Agent]')
+    const cls=isAgent?'agent-msg':m.role
+    const content=isAgent?m.content.replace('[Agent] ',''):m.content
+    const time=new Date(m.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})
+    const ds=new Date(m.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'})
+    const divider=ds!==lastDate?(lastDate=ds,`<div class="date-divider">${ds}</div>`):'';
+    const lbl=isAgent?'<div class="msg-sender agent">👤 Agent</div>':(m.role==='assistant'?'<div class="msg-sender medi">🌿 Medi</div>':'')
+    return `${divider}<div class="msg ${cls}">${lbl}<div class="msg-bubble">${escHtml(content)}</div><div class="msg-foot">${time}${m.tokens_used?` · ${m.tokens_used} tokens`:''}</div></div>`
   }).join('')
-
-  el.scrollTop = el.scrollHeight
+  el.scrollTop=el.scrollHeight
 }
 
-function renderActions(session) {
-  const el = document.getElementById('cv-actions')
-  if (session.mode === 'ai') {
-    el.innerHTML = `<button class="btn btn-takeover" onclick="takeOver()">Take over</button>`
-  } else {
-    el.innerHTML = `<button class="btn btn-return" onclick="returnToAi()">Return to AI</button>`
-  }
+// AGENT COMMANDS
+function takeOver(){if(!currentSessionId)return;sendWs({type:'take_over',sessionId:currentSessionId});toast('Taking over...','info')}
+function returnToAi(){if(!currentSessionId)return;sendWs({type:'return_to_ai',sessionId:currentSessionId});toast('Returning to Medi...','info')}
+function sendAgentReply(){
+  const inp=document.getElementById('reply-input'),text=inp.value.trim()
+  if(!text||!currentSessionId)return
+  sendWs({type:'agent_message',sessionId:currentSessionId,text})
+  inp.value='';inp.style.height='';toast('Sent ✓','success')
 }
 
-function renderReplyBar(session) {
-  const bar = document.getElementById('reply-bar')
-  bar.classList.toggle('hidden', session.mode !== 'agent')
+// STATS
+async function loadStats(){
+  const r=await apiFetch('/api/admin/stats');if(!r)return
+  document.getElementById('stat-total').textContent=r.total??'—'
+  document.getElementById('stat-waiting').textContent=r.waitingForAgent??'—'
+  document.getElementById('stat-today').textContent=r.todaySessions??'—'
 }
 
-// ── Agent commands ─────────────────────────────────────────
-
-function takeOver() {
-  if (!currentSessionId) return
-  sendWs({ type: 'take_over', sessionId: currentSessionId })
-  toast('Taking over session...', 'info')
+// KEYWORDS
+async function loadKeywords(){
+  const r=await apiFetch('/api/keywords')
+  if(!r){toast('Could not load keywords','error');return}
+  kwData=r.keywords||[]
+  document.getElementById('tab-count-keywords').textContent=kwData.length
+  renderKeywords()
+}
+function renderKeywords(){
+  const el=document.getElementById('kw-list')
+  if(!kwData.length){el.innerHTML='<div class="kw-empty">No keywords yet — add one above.</div>';return}
+  el.innerHTML=kwData.map(kw=>`
+    <div class="kw-row-item">
+      <span class="kw-code">${escHtml(kw.pattern)}</span>
+      <span class="kw-code term">${escHtml(kw.search_term)}</span>
+      <span class="kw-badge ${kw.category}">${kw.category}</span>
+      <button class="kw-toggle${kw.active?' on':''}" onclick="toggleKeyword('${kw.id}',${!kw.active})" title="${kw.active?'Disable':'Enable'}"></button>
+      <button class="btn-del-kw" onclick="deleteKeyword('${kw.id}')">Delete</button>
+    </div>`).join('')
+}
+async function addKeyword(){
+  const pattern=document.getElementById('kw-pattern').value.trim()
+  const search_term=document.getElementById('kw-term').value.trim()
+  const category=document.getElementById('kw-cat').value
+  if(!pattern||!search_term){toast('Both fields required','error');return}
+  const r=await apiPost('/api/keywords',{pattern,search_term,category})
+  if(!r){toast('Failed to add','error');return}
+  document.getElementById('kw-pattern').value=''
+  document.getElementById('kw-term').value=''
+  toast('Keyword added ✓','success');loadKeywords()
+}
+async function toggleKeyword(id,active){
+  const r=await apiPatch(`/api/keywords/${id}`,{active})
+  if(!r){toast('Update failed','error');return}
+  toast(active?'Enabled':'Disabled','info');loadKeywords()
+}
+async function deleteKeyword(id){
+  if(!confirm('Delete this keyword?'))return
+  const r=await apiDelete(`/api/keywords/${id}`)
+  if(!r){toast('Delete failed','error');return}
+  toast('Deleted','success');loadKeywords()
 }
 
-function returnToAi() {
-  if (!currentSessionId) return
-  sendWs({ type: 'return_to_ai', sessionId: currentSessionId })
-  toast('Returning session to Medi...', 'info')
+// API HELPERS
+async function apiFetch(p){try{const h=SECRET?{'x-admin-secret':SECRET}:{};const r=await fetch(API+p,{headers:h});return r.ok?r.json():null}catch{return null}}
+async function apiPost(p,b){try{const h={'Content-Type':'application/json',...(SECRET?{'x-admin-secret':SECRET}:{})};const r=await fetch(API+p,{method:'POST',headers:h,body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
+async function apiPatch(p,b){try{const h={'Content-Type':'application/json',...(SECRET?{'x-admin-secret':SECRET}:{})};const r=await fetch(API+p,{method:'PATCH',headers:h,body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
+async function apiDelete(p){try{const h=SECRET?{'x-admin-secret':SECRET}:{};return(await fetch(API+p,{method:'DELETE',headers:h})).ok}catch{return false}}
+
+// QUICK REPLIES
+async function loadQuickReplies(){
+  const r=await apiFetch('/api/quick-replies/all')
+  if(!r){toast('Could not load quick replies','error');return}
+  qrData=r.quickReplies||[]
+  document.getElementById('tab-count-qr').textContent=qrData.filter(q=>q.active).length
+  renderQuickReplies()
+}
+function renderQuickReplies(){
+  const el=document.getElementById('qr-list')
+  if(!qrData.length){el.innerHTML='<div class="qr-empty">No quick replies yet — add one above.</div>';return}
+  el.innerHTML=qrData.map(q=>`
+    <div class="qr-row-item">
+      <span class="qr-label-text">${escHtml(q.label)}</span>
+      <span class="qr-msg-text">${escHtml(q.message)}</span>
+      <span class="qr-order">${q.sort_order}</span>
+      <button class="kw-toggle${q.active?' on':''}" onclick="toggleQr('${q.id}',${!q.active})" title="${q.active?'Disable':'Enable'}"></button>
+      <button class="btn-del-kw" onclick="deleteQr('${q.id}')">Delete</button>
+    </div>`).join('')
+}
+async function addQuickReply(){
+  const label=document.getElementById('qr-label').value.trim()
+  const message=document.getElementById('qr-message').value.trim()
+  const sort_order=parseInt(document.getElementById('qr-order').value)||0
+  if(!label||!message){toast('Label and message required','error');return}
+  const r=await apiPost('/api/quick-replies',{label,message,sort_order})
+  if(!r){toast('Failed to add','error');return}
+  document.getElementById('qr-label').value=''
+  document.getElementById('qr-message').value=''
+  document.getElementById('qr-order').value='0'
+  toast('Quick reply added ✓','success');loadQuickReplies()
+}
+async function toggleQr(id,active){
+  const r=await apiPatch(`/api/quick-replies/${id}`,{active})
+  if(!r){toast('Update failed','error');return}
+  toast(active?'Enabled':'Disabled','info');loadQuickReplies()
+}
+async function deleteQr(id){
+  if(!confirm('Delete this quick reply?'))return
+  const r=await apiDelete(`/api/quick-replies/${id}`)
+  if(!r){toast('Delete failed','error');return}
+  toast('Deleted','success');loadQuickReplies()
 }
 
-function sendAgentReply() {
-  const input = document.getElementById('reply-input')
-  const text  = input.value.trim()
-  if (!text || !currentSessionId) return
+// UTILS
+function shortId(id){return id?id.slice(0,8)+'…':'—'}
+function relativeTime(iso){if(!iso)return'—';const d=Date.now()-new Date(iso).getTime();if(d<60000)return'just now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`}
+function escHtml(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px'}
+function toast(msg,type='info'){const c=document.getElementById('toasts'),t=document.createElement('div');t.className=`toast ${type}`;t.textContent=msg;c.appendChild(t);setTimeout(()=>t.remove(),3500)}
 
-  sendWs({ type: 'agent_message', sessionId: currentSessionId, text })
-  input.value = ''
-  input.style.height = ''
-  toast('Message sent', 'success')
-}
-
-// ── Stats ──────────────────────────────────────────────────
-
-async function loadStats() {
-  const res = await apiFetch('/api/admin/stats')
-  if (!res) return
-  document.getElementById('stat-total').textContent   = res.total
-  document.getElementById('stat-waiting').textContent = res.waitingForAgent
-  document.getElementById('stat-today').textContent   = res.todaySessions
-}
-
-// ── Utilities ──────────────────────────────────────────────
-
-async function apiFetch(path) {
-  try {
-    const headers = SECRET ? { 'x-admin-secret': SECRET } : {}
-    const res = await fetch(API + path, { headers })
-    if (!res.ok) return null
-    return res.json()
-  } catch { return null }
-}
-
-function shortId(id) {
-  return id ? id.slice(0, 8) + '...' : '—'
-}
-
-function relativeTime(iso) {
-  if (!iso) return '—'
-  const diff = Date.now() - new Date(iso).getTime()
-  if (diff < 60000)  return 'just now'
-  if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`
-  return `${Math.floor(diff/86400000)}d ago`
-}
-
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-}
-
-function autoResize(el) {
-  el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
-}
-
-function toast(msg, type = 'info') {
-  const c = document.getElementById('toasts')
-  const t = document.createElement('div')
-  t.className = `toast ${type}`
-  t.textContent = msg
-  c.appendChild(t)
-  setTimeout(() => t.remove(), 3500)
-}
-
-// ── Init ──────────────────────────────────────────────────
-
+// INIT
 connectWs()
-setInterval(() => { loadStats(); loadSessions() }, 30000)  // refresh every 30s
+setInterval(()=>{loadStats();loadSessions()},30000)
 </script>
 </body>
 </html>
