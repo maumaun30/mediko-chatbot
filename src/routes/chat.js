@@ -1,4 +1,4 @@
-import { createSession, sessionExists, loadHistory, saveMessagePair, getFullHistory } from '../services/sessionService.js'
+import { createSession, sessionExists, getSessionMode, loadHistory, saveMessagePair, getFullHistory } from '../services/sessionService.js'
 import { processMessage } from '../services/conversationManager.js'
 import { buildMessages }  from '../services/promptService.js'
 import { streamChat }     from '../services/openaiService.js'
@@ -153,3 +153,65 @@ export default async function chatRoutes(fastify) {
   })
 
 }
+
+
+  /**
+   * GET /api/chat/mode/:sessionId
+   * Returns the current mode of a session — used by the widget on reload
+   * to decide whether to open the agent listen stream.
+   */
+  fastify.get('/mode/:sessionId', async (request, reply) => {
+    const { sessionId } = request.params
+    const valid = await sessionExists(sessionId)
+    if (!valid) return reply.status(404).send({ error: 'Session not found' })
+    const mode = await getSessionMode(sessionId)
+    return reply.send({ sessionId, mode })
+  })
+
+
+  /**
+   * GET /api/chat/listen/:sessionId
+   *
+   * Long-lived SSE stream the widget subscribes to when in agent/handoff mode.
+   * The server pushes:
+   *   { type: 'agent_message', text }   — agent reply
+   *   { type: 'mode_changed',  mode }   — mode switched (e.g. back to AI)
+   *   { type: 'ping' }                  — keepalive every 25s
+   */
+  fastify.get('/listen/:sessionId', async (request, reply) => {
+    const { sessionId } = request.params
+
+    const valid = await sessionExists(sessionId)
+    if (!valid) return reply.status(404).send({ error: 'Session not found' })
+
+    const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
+    const requestOrigin = request.headers.origin || ''
+    const corsOrigin = allowedOrigin === '*' ? '*'
+      : (requestOrigin === allowedOrigin ? requestOrigin : '')
+
+    reply.raw.writeHead(200, {
+      'Content-Type':                'text/event-stream',
+      'Cache-Control':               'no-cache, no-transform',
+      'Connection':                  'keep-alive',
+      'X-Accel-Buffering':           'no',
+      'Access-Control-Allow-Origin': corsOrigin
+    })
+
+    const raw = reply.raw
+    subscribeWidget(sessionId, raw)
+
+    // Keepalive ping every 25s — prevents proxy/CDN closing idle connections
+    const ping = setInterval(() => {
+      try { raw.write('data: {"type":"ping"}\n\n') } catch { cleanup() }
+    }, 25000)
+
+    function cleanup() {
+      clearInterval(ping)
+      unsubscribeWidget(sessionId, raw)
+      try { raw.end() } catch {}
+    }
+
+    raw.on('close', cleanup)
+    raw.on('error', cleanup)
+  })
+

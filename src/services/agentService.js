@@ -25,6 +25,43 @@ import { dispatchReply, dispatchHandoffReturn } from './responseDispatcher.js'
 /** @type {Set<import('ws').WebSocket>} */
 const agentConnections = new Set()
 
+/**
+ * Widget SSE subscribers — map of sessionId → Set of response objects.
+ * When an agent sends a message, we push it to any widget listening on that session.
+ */
+const widgetSubscribers = new Map()  // sessionId → Set<reply.raw>
+
+/**
+ * Register a widget SSE connection for a session.
+ * Called from the chat route when the widget opens an agent-mode SSE stream.
+ */
+export function subscribeWidget(sessionId, raw) {
+  if (!widgetSubscribers.has(sessionId)) {
+    widgetSubscribers.set(sessionId, new Set())
+  }
+  widgetSubscribers.get(sessionId).add(raw)
+}
+
+/**
+ * Unregister a widget SSE connection (on close/error).
+ */
+export function unsubscribeWidget(sessionId, raw) {
+  widgetSubscribers.get(sessionId)?.delete(raw)
+}
+
+/**
+ * Push a message to all widget SSE connections for a session.
+ * Called whenever an agent sends a reply or the mode changes.
+ */
+export function pushToWidget(sessionId, event) {
+  const subs = widgetSubscribers.get(sessionId)
+  if (!subs?.size) return
+  const line = `data: ${JSON.stringify(event)}\n\n`
+  for (const raw of subs) {
+    try { raw.write(line) } catch { subs.delete(raw) }
+  }
+}
+
 // ── WebSocket server setup ───────────────────────────────────
 
 /**
@@ -93,27 +130,29 @@ async function handleAgentCommand(cmd) {
   switch (type) {
 
     case 'take_over':
-      // Admin proactively takes control of an AI session
       await setSessionMode(sessionId, 'agent', { handoffAt: new Date().toISOString() })
       await notifyAgentInbox({ type: 'mode_changed', sessionId, mode: 'agent', initiatedBy: 'agent' })
+      pushToWidget(sessionId, { type: 'mode_changed', mode: 'agent' })
       break
 
     case 'return_to_ai': {
-      // Admin returns session to AI
       const session = await setSessionMode(sessionId, 'ai', { clearAgent: true })
       await dispatchHandoffReturn(session.channel, session.channel_user_id)
       await notifyAgentInbox({ type: 'mode_changed', sessionId, mode: 'ai', initiatedBy: 'agent' })
+      pushToWidget(sessionId, { type: 'mode_changed', mode: 'ai' })
       break
     }
 
     case 'agent_message': {
-      // Admin sends a reply directly to the customer
       if (!text?.trim()) throw new Error('agent_message requires text')
 
-      const session = await setSessionMode(sessionId, 'agent')  // ensure still agent mode
+      const session = await setSessionMode(sessionId, 'agent')
       await dispatchReply(session.channel, session.channel_user_id, text)
       await saveAgentMessage(sessionId, text)
       await notifyAgentInbox({ type: 'agent_sent', sessionId, text })
+
+      // Push agent reply to any widget SSE connections on this session
+      pushToWidget(sessionId, { type: 'agent_message', text })
       break
     }
 
