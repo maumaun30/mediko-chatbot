@@ -6,257 +6,244 @@
 <title>Mediko — Agent Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --primary:#187adc;--primary-dk:#115fa8;--primary-lt:#e8f3fd;
-  --secondary:#ffb73a;--secondary-dk:#e09a1a;--secondary-lt:#fff8e8;
-  --bg:#f0f5fb;--surface:#ffffff;--surface2:#f7faff;--border:#d0e4f7;
-  --text:#1a2e4a;--muted:#6b85a3;
-  --green:#16a34a;--green-lt:#dcfce7;
-  --amber:#d97706;--amber-lt:#fef3c7;
-  --red:#dc2626;--red-lt:#fee2e2;
+  --p:#187adc;--pd:#115fa8;--pl:#e8f3fd;
+  --s:#ffb73a;--sd:#e09a1a;--sl:#fff8e8;
+  --bg:#f0f5fb;--sur:#fff;--sur2:#f7faff;--bdr:#d0e4f7;
+  --tx:#1a2e4a;--mu:#6b85a3;
+  --gr:#16a34a;--gl:#dcfce7;
+  --am:#d97706;--al:#fef3c7;
+  --rd:#dc2626;--rl:#fee2e2;
 }
-body{font-family:'Poppins',-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;font-size:14px;overflow:hidden}
+body{font-family:'Poppins',-apple-system,sans-serif;background:var(--bg);color:var(--tx);height:100vh;display:flex;flex-direction:column;font-size:14px;overflow:hidden}
 
 /* HEADER */
-header{background:linear-gradient(135deg,#187adc 0%,#115fa8 100%);padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;box-shadow:0 2px 12px rgba(24,122,220,.25)}
+header{background:linear-gradient(135deg,#187adc,#115fa8);padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;box-shadow:0 2px 12px rgba(24,122,220,.25)}
 .logo{font-weight:700;font-size:17px;color:#fff;display:flex;align-items:center;gap:9px}
-.logo-icon{width:30px;height:30px;background:var(--secondary);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
-.header-right{display:flex;align-items:center;gap:20px}
+.logo-icon{width:30px;height:30px;background:var(--s);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.hdr-right{display:flex;align-items:center;gap:20px}
 .stats-bar{display:flex;gap:24px}
 .stat{text-align:center}
 .stat-val{font-size:20px;font-weight:700;color:#fff;line-height:1}
-.stat-val.urgent{color:var(--secondary)}
+.stat-val.u{color:var(--s)}
 .stat-lbl{font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;font-weight:500;letter-spacing:.3px;text-transform:uppercase}
 .ws-pill{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:500;color:rgba(255,255,255,.85)}
 .ws-dot{width:7px;height:7px;border-radius:50%;background:#f87171;transition:background .3s}
 .ws-dot.on{background:#4ade80}
 
-/* TAB NAV */
-.tab-nav{background:var(--surface);border-bottom:2px solid var(--border);display:flex;padding:0 24px;gap:4px;flex-shrink:0}
-.tab-btn{padding:13px 20px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;background:transparent;border:none;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;display:flex;align-items:center;gap:7px}
-.tab-btn:hover{color:var(--primary)}
-.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary)}
-.tab-count{background:var(--primary-lt);color:var(--primary);font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}
-.tab-count.urgent{background:var(--amber-lt);color:var(--amber)}
+/* TABS */
+.tab-nav{background:var(--sur);border-bottom:2px solid var(--bdr);display:flex;padding:0 24px;gap:4px;flex-shrink:0}
+.tab-btn{padding:13px 18px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;background:transparent;border:none;color:var(--mu);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;display:flex;align-items:center;gap:6px}
+.tab-btn:hover{color:var(--p)}
+.tab-btn.active{color:var(--p);border-bottom-color:var(--p)}
+.tab-count{background:var(--pl);color:var(--p);font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}
+.tab-count.u{background:var(--al);color:var(--am)}
 
-/* BODY */
 .tab-body{flex:1;overflow:hidden;display:none}
 .tab-body.active{display:flex}
 
 /* SIDEBAR */
-.sidebar{width:310px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
-.sidebar-top{padding:14px 16px;border-bottom:1px solid var(--border)}
-.sidebar-title{font-weight:600;font-size:14px;color:var(--text)}
-.search-input{margin:10px 12px;padding:9px 13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;color:var(--text);outline:none;width:calc(100% - 24px);transition:border-color .2s}
-.search-input:focus{border-color:var(--primary)}
-.search-input::placeholder{color:var(--muted)}
+.sidebar{width:300px;background:var(--sur);border-right:1px solid var(--bdr);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-top{padding:12px 14px;border-bottom:1px solid var(--bdr)}
+.sidebar-title{font-weight:600;font-size:14px}
+.search-input{margin:8px 10px;padding:8px 12px;background:var(--sur2);border:1.5px solid var(--bdr);border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;color:var(--tx);outline:none;width:calc(100% - 20px);transition:border-color .2s}
+.search-input:focus{border-color:var(--p)}
+.search-input::placeholder{color:var(--mu)}
 .session-list{flex:1;overflow-y:auto}
 
 /* SESSION ITEMS */
-.session-item{padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;align-items:flex-start;gap:11px;position:relative}
-.session-item:hover{background:var(--surface2)}
-.session-item.active{background:var(--primary-lt);border-left:3px solid var(--primary);padding-left:13px}
-.session-item.needs-agent{border-left:3px solid var(--secondary);padding-left:13px}
-.ch-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;font-weight:700}
-.ch-avatar.widget{background:var(--primary-lt);color:var(--primary)}
-.ch-avatar.whatsapp{background:#dcfce7;color:#15803d}
-.ch-avatar.messenger{background:#ede9fe;color:#7c3aed}
-.session-body{flex:1;min-width:0}
-.session-row1{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
-.session-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
-.session-time{font-size:11px;color:var(--muted);flex-shrink:0}
-.session-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px}
-.session-tags{display:flex;gap:5px}
-.tag{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:.2px}
-.tag-ai{background:var(--green-lt);color:var(--green)}
-.tag-agent{background:var(--amber-lt);color:var(--amber)}
-.tag-waiting{background:var(--amber-lt);color:var(--amber);animation:tagPulse 1.5s ease infinite}
+.session-item{padding:11px 14px;border-bottom:1px solid var(--bdr);cursor:pointer;transition:background .15s;display:flex;align-items:flex-start;gap:10px;position:relative}
+.session-item:hover{background:var(--sur2)}
+.session-item.active{background:var(--pl);border-left:3px solid var(--p);padding-left:11px}
+.session-item.needs-agent{border-left:3px solid var(--s);padding-left:11px}
+.ch-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;font-weight:700}
+.ch-av.widget{background:var(--pl);color:var(--p)}
+.ch-av.whatsapp{background:#dcfce7;color:#15803d}
+.ch-av.messenger{background:#ede9fe;color:#7c3aed}
+.s-body{flex:1;min-width:0}
+.s-row1{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.s-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
+.s-time{font-size:11px;color:var(--mu);flex-shrink:0}
+.s-prev{font-size:11px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+.s-tags{display:flex;gap:4px}
+.tag{padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600}
+.tag-ai{background:var(--gl);color:var(--gr)}
+.tag-agent{background:var(--al);color:var(--am)}
+.tag-wait{background:var(--al);color:var(--am);animation:tagPulse 1.5s infinite}
 @keyframes tagPulse{0%,100%{opacity:1}50%{opacity:.55}}
-.unread-dot{position:absolute;top:14px;right:12px;width:8px;height:8px;border-radius:50%;background:var(--primary)}
+.s-unread{position:absolute;top:10px;right:9px;background:var(--p);color:#fff;font-size:10px;font-weight:700;border-radius:10px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px;animation:badgePop .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
 
 /* CHAT PANEL */
 .chat-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
-.chat-top{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.chat-info{display:flex;align-items:center;gap:11px}
-.chat-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;background:var(--primary-lt);color:var(--primary);flex-shrink:0}
-.chat-name{font-size:14px;font-weight:600;color:var(--text)}
-.chat-meta{font-size:12px;color:var(--muted);margin-top:1px}
-.chat-btns{display:flex;gap:8px}
-.btn{padding:8px 16px;border-radius:10px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;border:none;transition:all .2s}
-.btn-takeover{background:var(--secondary);color:#1a2e4a}
-.btn-takeover:hover{background:var(--secondary-dk);transform:translateY(-1px)}
-.btn-return{background:var(--green-lt);color:var(--green);border:1.5px solid #86efac}
-.btn-return:hover{background:#bbf7d0;transform:translateY(-1px)}
-.btn:disabled{opacity:.4;cursor:default;transform:none!important}
+.chat-top{background:var(--sur);border-bottom:1px solid var(--bdr);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.chat-info{display:flex;align-items:center;gap:10px}
+.chat-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;background:var(--pl);color:var(--p);flex-shrink:0}
+.chat-name{font-size:14px;font-weight:600}
+.chat-meta{font-size:11px;color:var(--mu);margin-top:1px}
+.chat-btns{display:flex;gap:7px;align-items:center}
+.btn{padding:7px 14px;border-radius:9px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;border:none;transition:all .2s}
+.btn-take{background:var(--s);color:#1a2e4a}
+.btn-take:hover{background:var(--sd);transform:translateY(-1px)}
+.btn-ret{background:var(--gl);color:var(--gr);border:1.5px solid #86efac}
+.btn-ret:hover{background:#bbf7d0;transform:translateY(-1px)}
 
 /* MESSAGES */
-.messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
-.date-divider{text-align:center;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:center;gap:10px}
-.date-divider::before,.date-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.messages{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.date-div{text-align:center;font-size:10px;font-weight:600;color:var(--mu);letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.date-div::before,.date-div::after{content:'';flex:1;height:1px;background:var(--bdr)}
 .msg{display:flex;flex-direction:column;max-width:72%}
 .msg.user{align-self:flex-end;align-items:flex-end}
 .msg.assistant,.msg.agent-msg{align-self:flex-start;align-items:flex-start}
-.msg-sender{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;padding:0 4px}
-.msg-sender.medi{color:var(--primary)}
-.msg-sender.agent{color:var(--amber)}
-.msg-bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
-.msg.user .msg-bubble{background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border-bottom-right-radius:4px;box-shadow:0 2px 8px rgba(24,122,220,.2)}
-.msg.assistant .msg-bubble{background:var(--surface);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px}
-.msg.agent-msg .msg-bubble{background:var(--amber-lt);color:#7c4a00;border:1px solid #fcd34d;border-bottom-left-radius:4px}
-.msg-foot{font-size:11px;color:var(--muted);margin-top:4px;padding:0 4px}
+.msg-sndr{font-size:10px;font-weight:600;color:var(--mu);margin-bottom:3px;padding:0 3px}
+.msg-sndr.medi{color:var(--p)}
+.msg-sndr.agent{color:var(--am)}
+.msg-bbl{padding:9px 13px;border-radius:16px;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.msg.user .msg-bbl{background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;border-bottom-right-radius:3px}
+.msg.assistant .msg-bbl{background:var(--sur);color:var(--tx);border:1px solid var(--bdr);border-bottom-left-radius:3px}
+.msg.agent-msg .msg-bbl{background:var(--al);color:#7c4a00;border:1px solid #fcd34d;border-bottom-left-radius:3px}
+.msg-foot{font-size:10px;color:var(--mu);margin-top:3px;padding:0 3px;display:flex;align-items:center;gap:6px}
 
-/* REPLY BAR */
-.reply-bar{background:var(--surface);border-top:1px solid var(--border);padding:12px 16px;flex-shrink:0}
+/* REPLY */
+.reply-bar{background:var(--sur);border-top:1px solid var(--bdr);padding:10px 14px;flex-shrink:0}
 .reply-bar.hidden{display:none}
-.reply-inner{display:flex;gap:10px;align-items:flex-end}
-.reply-input{flex:1;background:var(--surface2);border:1.5px solid var(--border);border-radius:14px;padding:10px 14px;color:var(--text);font-size:14px;font-family:'Poppins',sans-serif;resize:none;min-height:44px;max-height:120px;outline:none;transition:border-color .2s}
-.reply-input:focus{border-color:var(--primary)}
-.reply-input::placeholder{color:var(--muted)}
-.btn-send{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--secondary),#ffd815);color:#1a2e4a;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(255,183,58,.4);flex-shrink:0}
-.btn-send:hover{transform:scale(1.08);box-shadow:0 5px 14px rgba(255,183,58,.5)}
-.reply-hint{font-size:11px;color:var(--muted);margin-top:6px}
+.typing-hint{font-size:11px;color:var(--mu);padding:0 2px 6px;min-height:18px;transition:opacity .2s}
+.reply-inner{display:flex;gap:9px;align-items:flex-end}
+.reply-input{flex:1;background:var(--sur2);border:1.5px solid var(--bdr);border-radius:13px;padding:9px 13px;color:var(--tx);font-size:14px;font-family:'Poppins',sans-serif;resize:none;min-height:42px;max-height:110px;outline:none;transition:border-color .2s}
+.reply-input:focus{border-color:var(--p)}
+.reply-input::placeholder{color:var(--mu)}
+.btn-send{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--s),#ffd815);color:#1a2e4a;border:none;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(255,183,58,.4);flex-shrink:0}
+.btn-send:hover{transform:scale(1.08)}
+.reply-hint{font-size:10px;color:var(--mu);margin-top:5px}
 
 /* EMPTY */
-.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted)}
-.empty-icon{font-size:48px;opacity:.4}
-.empty-title{font-size:16px;font-weight:600;color:var(--text)}
-.empty-sub{font-size:13px}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--mu)}
+.empty-icon{font-size:44px;opacity:.35}
+.empty-title{font-size:15px;font-weight:600;color:var(--tx)}
+.empty-sub{font-size:12px}
 
-/* KEYWORDS TAB */
-.kw-layout{flex:1;display:flex;flex-direction:column;overflow-y:auto;padding:20px;gap:16px;background:var(--bg)}
-.kw-add-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;flex-shrink:0}
-.kw-add-card h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:14px}
-.kw-form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
-.kw-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:160px}
-.kw-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.kw-input{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-size:13px;font-family:'Poppins',sans-serif;outline:none;transition:border-color .2s;width:100%}
-.kw-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(24,122,220,.1)}
-.kw-input::placeholder{color:var(--muted)}
-.kw-select{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-size:13px;font-family:'Poppins',sans-serif;outline:none;cursor:pointer;width:100%}
-.btn-add-kw{background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(24,122,220,.3);white-space:nowrap;height:40px;align-self:flex-end}
-.btn-add-kw:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(24,122,220,.4)}
-.kw-hint{font-size:11px;color:var(--muted);margin-top:8px}
-.kw-table-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;flex-shrink:0}
-.kw-table-head{display:grid;grid-template-columns:1fr 1fr 100px 70px 70px;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.kw-row-item{display:grid;grid-template-columns:1fr 1fr 100px 70px 70px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;transition:background .15s}
-.kw-row-item:last-child{border-bottom:none}
-.kw-row-item:hover{background:var(--surface2)}
-.kw-code{font-family:'Courier New',monospace;font-size:12px;background:var(--surface2);padding:3px 8px;border-radius:6px;color:var(--text);display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.kw-code.term{color:var(--primary);background:var(--primary-lt)}
-.kw-badge{padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600;display:inline-block}
-.kw-badge.health{background:var(--green-lt);color:var(--green)}
-.kw-badge.product{background:var(--primary-lt);color:var(--primary)}
-.kw-badge.other{background:var(--surface2);color:var(--muted)}
-.kw-toggle{width:36px;height:20px;border-radius:10px;background:#d1d5db;position:relative;cursor:pointer;transition:background .2s;border:none;flex-shrink:0}
-.kw-toggle.on{background:var(--primary)}
-.kw-toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
-.kw-toggle.on::after{transform:translateX(16px)}
-.btn-del-kw{background:transparent;border:1px solid #fca5a5;color:var(--red);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
-.btn-del-kw:hover{background:var(--red);color:#fff;border-color:var(--red)}
-.kw-empty{padding:40px;text-align:center;color:var(--muted);font-size:13px}
+/* ── SHARED FORM STYLES ── */
+.form-card{background:var(--sur);border:1px solid var(--bdr);border-radius:16px;padding:20px;flex-shrink:0}
+.form-card h3{font-size:14px;font-weight:600;margin-bottom:14px}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.form-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:160px}
+.form-label{font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.4px}
+.form-input{background:var(--sur2);border:1.5px solid var(--bdr);border-radius:10px;padding:9px 13px;color:var(--tx);font-size:13px;font-family:'Poppins',sans-serif;outline:none;transition:border-color .2s;width:100%}
+.form-input:focus{border-color:var(--p);box-shadow:0 0 0 3px rgba(24,122,220,.1)}
+.form-input::placeholder{color:var(--mu)}
+.form-select{background:var(--sur2);border:1.5px solid var(--bdr);border-radius:10px;padding:9px 13px;color:var(--tx);font-size:13px;font-family:'Poppins',sans-serif;outline:none;cursor:pointer;width:100%}
+.btn-primary{background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(24,122,220,.3);white-space:nowrap;height:40px;align-self:flex-end}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(24,122,220,.4)}
+.form-hint{font-size:11px;color:var(--mu);margin-top:6px}
+.table-card{background:var(--sur);border:1px solid var(--bdr);border-radius:16px;overflow:hidden;flex-shrink:0}
+.table-head{padding:9px 14px;background:var(--sur2);border-bottom:1px solid var(--bdr);font-size:11px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.4px}
+.table-row{padding:10px 14px;border-bottom:1px solid var(--bdr);align-items:center;transition:background .15s}
+.table-row:last-child{border-bottom:none}
+.table-row:hover{background:var(--sur2)}
+.mono{font-family:'Courier New',monospace;font-size:12px;background:var(--sur2);padding:2px 7px;border-radius:5px;color:var(--tx);display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mono.hi{color:var(--p);background:var(--pl)}
+.badge{padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600;display:inline-block}
+.badge-health{background:var(--gl);color:var(--gr)}
+.badge-product{background:var(--pl);color:var(--p)}
+.badge-other{background:var(--sur2);color:var(--mu)}
+.toggle{width:36px;height:20px;border-radius:10px;background:#d1d5db;position:relative;cursor:pointer;transition:background .2s;border:none;flex-shrink:0}
+.toggle.on{background:var(--p)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle.on::after{transform:translateX(16px)}
+.btn-del{background:transparent;border:1px solid #fca5a5;color:var(--rd);border-radius:7px;padding:3px 9px;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
+.btn-del:hover{background:var(--rd);color:#fff;border-color:var(--rd)}
+.scroll-layout{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;background:var(--bg)}
+
+/* ── KEYWORDS ── */
+.kw-grid{display:grid;grid-template-columns:1fr 1fr 100px 56px 60px;gap:8px;align-items:center}
+
+/* ── QUICK REPLIES ── */
+.qr-grid{display:grid;grid-template-columns:1fr 1fr 60px 56px 60px;gap:8px;align-items:center}
+
+/* ── ANALYTICS ── */
+.analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;flex-shrink:0}
+.metric-card{background:var(--sur);border:1px solid var(--bdr);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:4px}
+.metric-val{font-size:26px;font-weight:700;color:var(--p);line-height:1}
+.metric-lbl{font-size:12px;color:var(--mu);font-weight:500}
+.metric-sub{font-size:11px;color:var(--mu)}
+.chart-card{background:var(--sur);border:1px solid var(--bdr);border-radius:14px;padding:16px}
+.chart-title{font-size:13px;font-weight:600;color:var(--tx);margin-bottom:12px}
+.chart-row{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+.days-select{background:var(--sur2);border:1.5px solid var(--bdr);border-radius:9px;padding:5px 10px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--tx);outline:none;cursor:pointer}
+
+/* ── BUSINESS HOURS ── */
+.bh-grid{display:grid;grid-template-columns:80px 80px 1fr 1fr;gap:10px;align-items:center}
+.bh-day{font-size:13px;font-weight:600;color:var(--tx)}
+.bh-input{background:var(--sur2);border:1.5px solid var(--bdr);border-radius:8px;padding:7px 10px;font-size:13px;font-family:'Poppins',sans-serif;color:var(--tx);outline:none;width:100%}
+.bh-input:focus{border-color:var(--p)}
+.section-title{font-size:14px;font-weight:600;color:var(--tx);margin-bottom:12px;display:flex;align-items:center;gap:8px}
 
 /* TOAST */
-.toast-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999}
-.toast{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:11px 16px;font-size:13px;font-weight:500;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.1);animation:toastIn .2s ease;font-family:'Poppins',sans-serif}
-.toast.success{border-color:#86efac;color:var(--green)}
-.toast.error{border-color:#fca5a5;color:var(--red)}
-.toast.info{border-color:var(--border);color:var(--primary)}
-.toast.warning{border-color:#fcd34d;color:var(--amber)}
-@keyframes toastIn{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
+.toast-container{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:7px;z-index:9999}
+.toast{background:var(--sur);border:1.5px solid var(--bdr);border-radius:12px;padding:10px 15px;font-size:13px;font-weight:500;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.1);animation:toastIn .2s ease;font-family:'Poppins',sans-serif}
+.toast.success{border-color:#86efac;color:var(--gr)}
+.toast.error{border-color:#fca5a5;color:var(--rd)}
+.toast.info{border-color:var(--bdr);color:var(--p)}
+.toast.warning{border-color:#fcd34d;color:var(--am)}
+@keyframes toastIn{from{transform:translateX(14px);opacity:0}to{transform:translateX(0);opacity:1}}
 
-/* QUICK REPLIES TAB — reuses keyword styles */
-.qr-layout{flex:1;display:flex;flex-direction:column;overflow-y:auto;padding:20px;gap:16px;background:var(--bg)}
-.qr-add-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;flex-shrink:0}
-.qr-add-card h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:14px}
-.qr-form-col{display:flex;flex-direction:column;gap:10px}
-.qr-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
-.qr-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:180px}
-.qr-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.qr-input{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-size:13px;font-family:'Poppins',sans-serif;outline:none;transition:border-color .2s;width:100%}
-.qr-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(24,122,220,.1)}
-.qr-input::placeholder{color:var(--muted)}
-.btn-add-qr{background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(24,122,220,.3);white-space:nowrap;height:40px;align-self:flex-end}
-.btn-add-qr:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(24,122,220,.4)}
-.qr-hint{font-size:11px;color:var(--muted);margin-top:6px}
-.qr-table-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;flex-shrink:0}
-.qr-table-head{display:grid;grid-template-columns:1fr 1fr 60px 70px 70px;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.qr-row-item{display:grid;grid-template-columns:1fr 1fr 60px 70px 70px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;transition:background .15s;gap:8px}
-.qr-row-item:last-child{border-bottom:none}
-.qr-row-item:hover{background:var(--surface2)}
-.qr-label-text{font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.qr-msg-text{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Courier New',monospace}
-.qr-order{font-size:12px;color:var(--muted);text-align:center}
-.qr-empty{padding:40px;text-align:center;color:var(--muted);font-size:13px}
-
-/* UNREAD BADGE on session items */
-.session-unread{position:absolute;top:12px;right:10px;background:var(--primary);color:#fff;font-size:10px;font-weight:700;border-radius:10px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px;animation:badgePop .3s cubic-bezier(.34,1.56,.64,1)}
-@keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
-
-/* SCROLLBAR */
-::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:#b0c8e8}
+::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
 </style>
 </head>
 <body>
 
 <header>
   <div class="logo"><div class="logo-icon">🌿</div>Mediko Agent Dashboard</div>
-  <div class="header-right">
+  <div class="hdr-right">
     <div class="stats-bar">
-      <div class="stat"><div class="stat-val" id="stat-total">—</div><div class="stat-lbl">Total</div></div>
-      <div class="stat"><div class="stat-val urgent" id="stat-waiting">—</div><div class="stat-lbl">Waiting</div></div>
-      <div class="stat"><div class="stat-val" id="stat-today">—</div><div class="stat-lbl">Today</div></div>
+      <div class="stat"><div class="stat-val" id="st-total">—</div><div class="stat-lbl">Total</div></div>
+      <div class="stat"><div class="stat-val u" id="st-wait">—</div><div class="stat-lbl">Waiting</div></div>
+      <div class="stat"><div class="stat-val" id="st-today">—</div><div class="stat-lbl">Today</div></div>
     </div>
-    <div class="ws-pill"><div class="ws-dot" id="ws-dot"></div><span id="ws-label">Connecting...</span></div>
+    <div class="ws-pill"><div class="ws-dot" id="ws-dot"></div><span id="ws-lbl">Connecting...</span></div>
   </div>
 </header>
 
 <nav class="tab-nav">
-  <button class="tab-btn active" id="tab-btn-sessions" onclick="showTab('sessions')">
-    💬 Sessions <span class="tab-count" id="tab-count-sessions">0</span>
-  </button>
-  <button class="tab-btn" id="tab-btn-keywords" onclick="showTab('keywords')">
-    🔑 Keywords <span class="tab-count" id="tab-count-keywords">0</span>
-  </button>
-  <button class="tab-btn" id="tab-btn-quickreplies" onclick="showTab('quickreplies')">
-    ⚡ Quick Replies <span class="tab-count" id="tab-count-qr">0</span>
-  </button>
+  <button class="tab-btn active" id="tb-sessions"    onclick="showTab('sessions')">💬 Sessions <span class="tab-count" id="tc-sessions">0</span></button>
+  <button class="tab-btn"        id="tb-keywords"   onclick="showTab('keywords')">🔑 Keywords <span class="tab-count" id="tc-keywords">0</span></button>
+  <button class="tab-btn"        id="tb-quickreplies" onclick="showTab('quickreplies')">⚡ Quick Replies <span class="tab-count" id="tc-qr">0</span></button>
+  <button class="tab-btn"        id="tb-analytics"  onclick="showTab('analytics')">📊 Analytics</button>
+  <button class="tab-btn"        id="tb-settings"   onclick="showTab('settings')">⚙️ Settings</button>
 </nav>
 
-<!-- SESSIONS -->
+<!-- ══ SESSIONS ══ -->
 <div class="tab-body active" id="tab-sessions">
   <aside class="sidebar">
     <div class="sidebar-top"><span class="sidebar-title">Conversations</span></div>
-    <input class="search-input" id="search-input" type="text" placeholder="🔍  Search sessions..." oninput="filterSessions(this.value)">
+    <input class="search-input" id="srch" type="text" placeholder="🔍  Search..." oninput="filterSessions(this.value)">
     <div class="session-list" id="session-list">
-      <div class="empty" style="padding:48px 0"><div class="empty-icon">💬</div><div class="empty-sub">Loading...</div></div>
+      <div class="empty" style="padding:40px 0"><div class="empty-icon">💬</div><div class="empty-sub">Loading...</div></div>
     </div>
   </aside>
   <main class="chat-panel">
-    <div class="empty" id="empty-state">
-      <div class="empty-icon">👈</div>
-      <div class="empty-title">Select a conversation</div>
-      <div class="empty-sub">Choose a session from the left</div>
-    </div>
+    <div class="empty" id="empty-state"><div class="empty-icon">👈</div><div class="empty-title">Select a conversation</div><div class="empty-sub">Choose from the left</div></div>
     <div id="chat-view" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
       <div class="chat-top">
         <div class="chat-info">
-          <div class="chat-avatar" id="cv-avatar">💬</div>
+          <div class="chat-av" id="cv-av">💬</div>
           <div><div class="chat-name" id="cv-name">—</div><div class="chat-meta" id="cv-meta">—</div></div>
         </div>
-        <div class="chat-btns" id="cv-actions"></div>
+        <div class="chat-btns" id="cv-btns"></div>
       </div>
-      <div class="messages" id="cv-messages"></div>
+      <div class="messages" id="cv-msgs"></div>
       <div class="reply-bar hidden" id="reply-bar">
+        <div class="typing-hint" id="typing-hint"></div>
         <div class="reply-inner">
-          <textarea class="reply-input" id="reply-input" placeholder="Type your reply as agent..." rows="1"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentReply()}"
-            oninput="autoResize(this)"></textarea>
-          <button class="btn-send" onclick="sendAgentReply()" title="Send">➤</button>
+          <textarea class="reply-input" id="reply-inp" placeholder="Type reply as agent..." rows="1"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply()}"
+            oninput="autoResize(this);sendTyping()"></textarea>
+          <button class="btn-send" onclick="sendReply()">➤</button>
         </div>
         <div class="reply-hint">Enter to send · Shift+Enter for new line</div>
       </div>
@@ -264,72 +251,188 @@ header{background:linear-gradient(135deg,#187adc 0%,#115fa8 100%);padding:0 24px
   </main>
 </div>
 
-<!-- KEYWORDS -->
+<!-- ══ KEYWORDS ══ -->
 <div class="tab-body" id="tab-keywords">
-  <div class="kw-layout">
-    <div class="kw-add-card">
+  <div class="scroll-layout">
+    <div class="form-card">
       <h3>➕ Add keyword</h3>
-      <div class="kw-form-row">
-        <div class="kw-field">
-          <label class="kw-label">Trigger pattern</label>
-          <input class="kw-input" id="kw-pattern" placeholder="e.g. genacol, kasukasuan">
-        </div>
-        <div class="kw-field">
-          <label class="kw-label">Shopify search term</label>
-          <input class="kw-input" id="kw-term" placeholder="e.g. genacol, collagen">
-        </div>
-        <div class="kw-field" style="flex:0;min-width:130px">
-          <label class="kw-label">Category</label>
-          <select class="kw-select" id="kw-cat">
-            <option value="health">health</option>
-            <option value="product">product</option>
-            <option value="other">other</option>
-          </select>
-        </div>
-        <button class="btn-add-kw" onclick="addKeyword()">Add keyword</button>
+      <div class="form-row">
+        <div class="form-field"><label class="form-label">Trigger pattern</label><input class="form-input" id="kw-pat" placeholder="e.g. genacol, kasukasuan"></div>
+        <div class="form-field"><label class="form-label">Shopify search term</label><input class="form-input" id="kw-term" placeholder="e.g. genacol, collagen"></div>
+        <div class="form-field" style="flex:0;min-width:120px"><label class="form-label">Category</label><select class="form-select" id="kw-cat"><option value="health">health</option><option value="product">product</option><option value="other">other</option></select></div>
+        <button class="btn-primary" onclick="addKw()">Add</button>
       </div>
-      <div class="kw-hint"><strong>Pattern</strong> = what customer types &nbsp;·&nbsp; <strong>Search term</strong> = what gets sent to Shopify</div>
+      <div class="form-hint"><strong>Pattern</strong> = customer types &nbsp;·&nbsp; <strong>Search term</strong> = sent to Shopify</div>
     </div>
-    <div class="kw-table-card">
-      <div class="kw-table-head">
-        <span>Pattern</span><span>Shopify search term</span><span>Category</span><span>Active</span><span></span>
-      </div>
-      <div id="kw-list"><div class="kw-empty">Loading keywords...</div></div>
+    <div class="table-card">
+      <div class="table-head kw-grid"><span>Pattern</span><span>Search term</span><span>Category</span><span>Active</span><span></span></div>
+      <div id="kw-list"><div class="empty" style="padding:30px 0"><div class="empty-sub">Loading...</div></div></div>
     </div>
   </div>
 </div>
 
-<!-- QUICK REPLIES -->
+<!-- ══ QUICK REPLIES ══ -->
 <div class="tab-body" id="tab-quickreplies">
-  <div class="qr-layout">
-    <div class="qr-add-card">
-      <h3>⚡ Add quick reply button</h3>
-      <div class="qr-form-col">
-        <div class="qr-row">
-          <div class="qr-field">
-            <label class="qr-label">Button label (shown in widget)</label>
-            <input class="qr-input" id="qr-label" placeholder="e.g. Para sa immunity">
-          </div>
-          <div class="qr-field">
-            <label class="qr-label">Message sent when clicked</label>
-            <input class="qr-input" id="qr-message" placeholder="e.g. May pang-immunity ba kayong supplement?">
-          </div>
-          <div class="qr-field" style="flex:0;min-width:80px">
-            <label class="qr-label">Order</label>
-            <input class="qr-input" id="qr-order" type="number" value="0" min="0" style="width:80px">
-          </div>
-          <button class="btn-add-qr" onclick="addQuickReply()">Add</button>
+  <div class="scroll-layout">
+    <div class="form-card">
+      <h3>⚡ Add quick reply</h3>
+      <div class="form-row">
+        <div class="form-field"><label class="form-label">Button label</label><input class="form-input" id="qr-lbl" placeholder="e.g. Para sa immunity"></div>
+        <div class="form-field"><label class="form-label">Message sent</label><input class="form-input" id="qr-msg" placeholder="e.g. May pang-immunity ba kayong supplement?"></div>
+        <div class="form-field" style="flex:0;min-width:80px"><label class="form-label">Order</label><input class="form-input" id="qr-ord" type="number" value="0" min="0" style="width:80px"></div>
+        <button class="btn-primary" onclick="addQr()">Add</button>
+      </div>
+      <div class="form-hint"><strong>Label</strong> = button text &nbsp;·&nbsp; <strong>Message</strong> = what actually gets sent to Medi</div>
+    </div>
+    <div class="table-card">
+      <div class="table-head qr-grid"><span>Label</span><span>Message sent</span><span>Order</span><span>Active</span><span></span></div>
+      <div id="qr-list"><div class="empty" style="padding:30px 0"><div class="empty-sub">Loading...</div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ANALYTICS ══ -->
+<div class="tab-body" id="tab-analytics">
+  <div class="scroll-layout">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div class="section-title">📊 Overview</div>
+      <select class="days-select" id="days-sel" onchange="loadAnalytics()">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
+    </div>
+    <div class="analytics-grid" id="metrics-grid">
+      <div class="metric-card"><div class="metric-val" id="m-sessions">—</div><div class="metric-lbl">Total sessions</div></div>
+      <div class="metric-card"><div class="metric-val" id="m-msgs">—</div><div class="metric-lbl">Total messages</div></div>
+      <div class="metric-card"><div class="metric-val" id="m-handoffs">—</div><div class="metric-lbl">Agent handoffs</div></div>
+      <div class="metric-card"><div class="metric-val" id="m-tokens">—</div><div class="metric-lbl">Tokens used</div></div>
+      <div class="metric-card"><div class="metric-val" id="m-thumbup">—</div><div class="metric-lbl">👍 Ratings</div></div>
+      <div class="metric-card"><div class="metric-val" id="m-thumbdn">—</div><div class="metric-lbl">👎 Ratings</div></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-card"><div class="chart-title">Sessions per day</div><canvas id="chart-daily" height="180"></canvas></div>
+      <div class="chart-card"><div class="chart-title">By channel</div><canvas id="chart-channel" height="180"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SETTINGS ══ -->
+<div class="tab-body" id="tab-settings">
+  <div class="scroll-layout">
+
+    <!-- Business hours -->
+    <div class="form-card">
+      <div class="section-title">🕐 Business hours</div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-field" style="flex:0">
+          <label class="form-label">Enable business hours</label>
+          <button class="toggle" id="bh-toggle" onclick="toggleBH()"></button>
         </div>
-        <div class="qr-hint">
-          <strong>Tip:</strong> The label is the button text in the widget. The message is what actually gets sent to Medi when the customer clicks it. They can be different — e.g. label "Para sa joints" → message "May supplement para sa kasukasuan?"
+        <div class="form-field" style="flex:0;min-width:180px">
+          <label class="form-label">Timezone</label>
+          <select class="form-select" id="bh-tz">
+            <option value="Asia/Manila">Asia/Manila (PHT)</option>
+            <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+            <option value="UTC">UTC</option>
+          </select>
         </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px" id="bh-rows"></div>
+      <div class="form-field" style="margin-bottom:14px">
+        <label class="form-label">Away message (shown outside business hours)</label>
+        <textarea class="form-input" id="bh-away" rows="2" style="resize:vertical"></textarea>
+      </div>
+      <button class="btn-primary" onclick="saveBH()">Save business hours</button>
+    </div>
+
+    <!-- Agent idle timeout -->
+    <div class="form-card">
+      <div class="section-title">⏱ Auto-close idle agent sessions</div>
+      <div class="form-row">
+        <div class="form-field" style="flex:0;min-width:200px">
+          <label class="form-label">Idle timeout (minutes)</label>
+          <input class="form-input" id="idle-mins" type="number" min="5" max="480" value="30" style="width:120px">
+        </div>
+        <div class="form-field">
+          <label class="form-label">What happens</label>
+          <div style="font-size:13px;color:var(--mu);padding:9px 0">Sessions in agent mode with no activity for this long are automatically returned to AI mode.</div>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="saveIdle()" style="margin-top:10px">Save</button>
+    </div>
+
+  </div>
+</div>
+
+<audio id="notif-sound" preload="auto">
+  <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFhYqKioqHh4eHiIiJiYqKi4uMjIyNjY2Njo6Pj4+QkJCRkZGSkpKTk5OUlJSVlZWWlpaXl5eYmJiZmZmampqbm5ucnJydnZ2enp6fn5+goKChoaGioqKjo6OkpKSlpaWmpqanp6eoqKipqamqqqqrq6usrKytra2urq6vr6+wsLCxsbGysrKzs7O0tLS1tbW2tra3t7e4uLi5ubm6urq7u7u8vLy9vb2+vr6/v7/AwMDBwcHCwsLDw8PExMTFxcXGxsbHx8fIyMjJycnKysrLy8vMzMzNzc3Ozs7Pz8/Q0NDR0dHS0tLT09PU1NTV1dXW1tbX19fY2NjZ2dna2trb29vc3Nzd3d3e3t7f39/g4ODh4eHi4uLj4+Pk5OTl5eXm5ubn5+fo6Ojp6enq6urr6+vs7Ozt7e3u7u7v7+/w8PDx8fHy8vLz8/P09PT19fX29vb39/f4+Pj5+fn6+vr7+/v8/Pz9/f3+/v4=" type="audio/wav">
+</audio>
+
+<!-- ANALYTICS -->
+<div class="tab-body" id="tab-analytics">
+  <div class="kw-layout">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;flex-shrink:0" id="analytics-cards">
+      <div class="ana-card"><div class="ana-val" id="ana-sessions">—</div><div class="ana-lbl">Sessions</div></div>
+      <div class="ana-card"><div class="ana-val" id="ana-messages">—</div><div class="ana-lbl">Messages</div></div>
+      <div class="ana-card"><div class="ana-val urgent" id="ana-handoffs">—</div><div class="ana-lbl">Handoffs</div></div>
+      <div class="ana-card"><div class="ana-val" id="ana-tokens">—</div><div class="ana-lbl">Tokens used</div></div>
+      <div class="ana-card"><div class="ana-val" id="ana-thumbsup">—</div><div class="ana-lbl">👍 Helpful</div></div>
+      <div class="ana-card"><div class="ana-val" id="ana-thumbsdown">—</div><div class="ana-lbl">👎 Not helpful</div></div>
+    </div>
+    <div class="kw-table-card" style="flex-shrink:0">
+      <div style="padding:12px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Sessions per day</div>
+      <div style="padding:16px;height:200px"><canvas id="ana-daily-chart"></canvas></div>
+    </div>
+    <div class="kw-table-card" style="flex-shrink:0">
+      <div style="padding:12px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Channel breakdown</div>
+      <div style="padding:16px;height:200px"><canvas id="ana-channel-chart"></canvas></div>
+    </div>
+    <div style="padding:0 0 8px;display:flex;gap:10px;align-items:center;flex-shrink:0">
+      <span style="font-size:12px;color:var(--muted)">Period:</span>
+      <select id="ana-period" style="background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-family:'Poppins',sans-serif;font-size:12px" onchange="loadAnalytics()">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="tab-body" id="tab-settings">
+  <div class="kw-layout">
+    <!-- Business hours -->
+    <div class="kw-add-card">
+      <h3>🕐 Business Hours</h3>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <button class="kw-toggle" id="bh-enabled-toggle" onclick="toggleBhEnabled()"></button>
+        <span style="font-size:13px;color:var(--text)" id="bh-enabled-label">Disabled — handoff always available</span>
+      </div>
+      <div id="bh-hours-grid" style="display:grid;grid-template-columns:80px 1fr 1fr 80px;gap:8px;align-items:center;font-size:13px;margin-bottom:14px">
+        <span style="font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase">Day</span>
+        <span style="font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase">Open</span>
+        <span style="font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase">Hours</span>
+        <span></span>
+      </div>
+      <div id="bh-days"></div>
+      <div style="margin-top:14px">
+        <label class="kw-label">Away message (shown to customers outside hours)</label>
+        <input class="kw-input" id="bh-away-msg" placeholder="Pasensya na po, wala kaming available na agent ngayon..." style="margin-top:6px">
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px">
+        <button class="btn-add-kw" onclick="saveBusinessHours()">Save business hours</button>
       </div>
     </div>
-    <div class="qr-table-card">
-      <div class="qr-table-head">
-        <span>Button label</span><span>Message sent</span><span>Order</span><span>Active</span><span></span>
+
+    <!-- Notification sound -->
+    <div class="kw-add-card">
+      <h3>🔔 Notifications</h3>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="kw-toggle on" id="sound-toggle" onclick="toggleSound()"></button>
+        <span style="font-size:13px;color:var(--text)" id="sound-label">Sound notifications enabled</span>
+        <button class="btn-add-qr" onclick="testSound()" style="margin-left:auto;padding:6px 14px;font-size:12px">Test sound</button>
       </div>
-      <div id="qr-list"><div class="qr-empty">Loading...</div></div>
     </div>
   </div>
 </div>
@@ -339,101 +442,127 @@ header{background:linear-gradient(135deg,#187adc 0%,#115fa8 100%);padding:0 24px
 <script>
 const API='', SECRET=new URLSearchParams(location.search).get('secret')??''
 const WS_URL=`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/agent/ws`
-let ws=null,currentSessionId=null,allSessions=[],wsReconnectTimer=null,kwData=[],qrData=[]
-const unreadCounts={} // sessionId → unread count
+let ws=null,currentSid=null,allSessions=[],wsTimer=null
+let kwData=[],qrData=[],unread={},typingTimer=null,dailyChart=null,channelChart=null
 
-// TAB SWITCHING
+// ── TABS ──────────────────────────────────────────────────
+
 function showTab(name){
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.id===`tab-btn-${name}`))
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.id===`tb-${name}`))
   document.querySelectorAll('.tab-body').forEach(b=>b.classList.toggle('active',b.id===`tab-${name}`))
-  if(name==='keywords')loadKeywords()
-  if(name==='quickreplies')loadQuickReplies()
+  if(name==='keywords')    loadKw()
+  if(name==='quickreplies')loadQr()
+  if(name==='analytics')   loadAnalytics()
+  if(name==='settings')    loadSettings()
 }
 
-// WEBSOCKET
+// ── WEBSOCKET ─────────────────────────────────────────────
+
 function connectWs(){
   if(ws){ws.onclose=null;ws.close()}
   ws=new WebSocket(WS_URL)
-  ws.onopen=()=>{setWsStatus(true);clearTimeout(wsReconnectTimer);loadSessions();loadStats()}
+  ws.onopen=()=>{setWs(true);clearTimeout(wsTimer);loadSessions();loadStats()}
   ws.onmessage=({data})=>{try{handleWsEvent(JSON.parse(data))}catch{}}
-  ws.onclose=()=>{setWsStatus(false);wsReconnectTimer=setTimeout(connectWs,3000)}
+  ws.onclose=()=>{setWs(false);wsTimer=setTimeout(connectWs,3000)}
   ws.onerror=()=>ws.close()
 }
-function setWsStatus(on){
+function setWs(on){
   document.getElementById('ws-dot').classList.toggle('on',on)
-  document.getElementById('ws-label').textContent=on?'Connected':'Reconnecting...'
+  document.getElementById('ws-lbl').textContent=on?'Connected':'Reconnecting...'
 }
 function sendWs(p){ws?.readyState===1?ws.send(JSON.stringify(p)):toast('Not connected','error')}
+
 function handleWsEvent(e){
   if(e.type==='handoff_requested'){
-    toast(`Handoff — ${e.channel}`,'warning')
-    if(e.sessionId!==currentSessionId){unreadCounts[e.sessionId]=(unreadCounts[e.sessionId]||0)+1}
+    toast(`⚡ Handoff — ${e.channel}`,'warning')
+    playNotif()
+    if(e.sessionId!==currentSid)unread[e.sessionId]=(unread[e.sessionId]||0)+1
     loadSessions();loadStats()
   } else if(e.type==='customer_message'){
-    if(e.sessionId===currentSessionId)refreshCurrentSession()
-    else{unreadCounts[e.sessionId]=(unreadCounts[e.sessionId]||0)+1;loadSessions()}
+    if(e.sessionId===currentSid)refreshSession()
+    else{unread[e.sessionId]=(unread[e.sessionId]||0)+1;loadSessions()}
   } else if(['mode_changed','agent_sent'].includes(e.type)){
     loadSessions();loadStats()
-    if(e.sessionId===currentSessionId)refreshCurrentSession()
+    if(e.sessionId===currentSid)refreshSession()
+  } else if(e.type==='agent_typing'&&e.sessionId===currentSid){
+    // Show typing indicator in chat header when another agent is typing
+    // (not needed in dashboard but good for future multi-agent)
   }
 }
 
-// SESSIONS
+// ── NOTIFICATION SOUND ────────────────────────────────────
+
+let audioCtx=null
+function playNotif(){
+  try{
+    if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)()
+    const osc=audioCtx.createOscillator()
+    const gain=audioCtx.createGain()
+    osc.connect(gain);gain.connect(audioCtx.destination)
+    osc.frequency.setValueAtTime(880,audioCtx.currentTime)
+    osc.frequency.setValueAtTime(660,audioCtx.currentTime+.1)
+    gain.gain.setValueAtTime(.3,audioCtx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.4)
+    osc.start();osc.stop(audioCtx.currentTime+.4)
+  }catch{}
+}
+
+// ── SESSIONS ──────────────────────────────────────────────
+
 async function loadSessions(){
   const r=await apiFetch('/api/admin/sessions?limit=60');if(!r)return
   allSessions=r.sessions||[]
-  document.getElementById('tab-count-sessions').textContent=allSessions.length
-  renderSessionList(allSessions)
+  document.getElementById('tc-sessions').textContent=allSessions.length
+  renderSessions(allSessions)
 }
 function filterSessions(q){
   const l=q.toLowerCase()
-  renderSessionList(q?allSessions.filter(s=>s.id.includes(l)||s.channel?.includes(l)||s.customer_email?.toLowerCase().includes(l)||s.channel_user_id?.toLowerCase().includes(l)):allSessions)
+  renderSessions(q?allSessions.filter(s=>s.id.includes(l)||s.channel?.includes(l)||s.customer_email?.toLowerCase().includes(l)||s.channel_user_id?.toLowerCase().includes(l)):allSessions)
 }
 const CHICO={widget:'💬',whatsapp:'📱',messenger:'💙'}
-function renderSessionList(list){
+function renderSessions(list){
   const el=document.getElementById('session-list')
-  if(!list.length){el.innerHTML='<div class="empty" style="padding:48px 0"><div class="empty-icon">🔍</div><div class="empty-sub">No sessions</div></div>';return}
+  if(!list.length){el.innerHTML='<div class="empty" style="padding:40px 0"><div class="empty-icon">🔍</div><div class="empty-sub">No sessions</div></div>';return}
   el.innerHTML=list.map(s=>{
     const icon=CHICO[s.channel]||'💬'
     const name=s.customer_email||s.channel_user_id||shortId(s.id)
     const needsAgent=s.mode==='agent'&&!s.assigned_agent
-    const tag=s.mode==='agent'?(needsAgent?'<span class="tag tag-waiting">⚡ Needs agent</span>':'<span class="tag tag-agent">👤 Agent</span>'):'<span class="tag tag-ai">🤖 AI</span>'
-    return `<div class="session-item${s.id===currentSessionId?' active':''}${needsAgent?' needs-agent':''}" onclick="openSession('${s.id}')">
-      <div class="ch-avatar ${s.channel}">${icon}</div>
-      <div class="session-body">
-        <div class="session-row1"><span class="session-name">${escHtml(name)}</span><span class="session-time">${relativeTime(s.last_active)}</span></div>
-        <div class="session-preview">${s.channel} · ${shortId(s.id)}</div>
-        <div class="session-tags">${tag}</div>
-      </div>
-      ${unreadCounts[s.id]?`<div class="session-unread">${unreadCounts[s.id]>9?'9+':unreadCounts[s.id]}</div>`:(needsAgent?'<div class="unread-dot"></div>':'')}
-    </div>`
+    const tag=s.mode==='agent'?(needsAgent?'<span class="tag tag-wait">⚡ Needs agent</span>':'<span class="tag tag-agent">👤 Agent</span>'):'<span class="tag tag-ai">🤖 AI</span>'
+    const badge=unread[s.id]?`<div class="s-unread">${unread[s.id]>9?'9+':unread[s.id]}</div>`:(needsAgent?'<div class="s-unread" style="background:var(--s);color:#1a2e4a">!</div>':'')
+    return`<div class="session-item${s.id===currentSid?' active':''}${needsAgent?' needs-agent':''}" onclick="openSession('${s.id}')">
+      <div class="ch-av ${s.channel}">${icon}</div>
+      <div class="s-body">
+        <div class="s-row1"><span class="s-name">${escH(name)}</span><span class="s-time">${relT(s.last_active)}</span></div>
+        <div class="s-prev">${s.channel} · ${shortId(s.id)}</div>
+        <div class="s-tags">${tag}</div>
+      </div>${badge}</div>`
   }).join('')
 }
 
-// SESSION DETAIL
 async function openSession(id){
-  currentSessionId=id
-  delete unreadCounts[id]
+  currentSid=id;delete unread[id]
   document.getElementById('empty-state').style.display='none'
   const cv=document.getElementById('chat-view');cv.style.display='flex'
   document.querySelectorAll('.session-item').forEach(el=>el.classList.toggle('active',el.getAttribute('onclick')?.includes(`'${id}'`)))
-  await refreshCurrentSession()
+  await refreshSession()
 }
-async function refreshCurrentSession(){
-  if(!currentSessionId)return
-  const r=await apiFetch(`/api/admin/sessions/${currentSessionId}`);if(!r)return
+
+async function refreshSession(){
+  if(!currentSid)return
+  const r=await apiFetch(`/api/admin/sessions/${currentSid}`);if(!r)return
   const{session,messages}=r
-  document.getElementById('cv-avatar').textContent=CHICO[session.channel]||'💬'
+  document.getElementById('cv-av').textContent=CHICO[session.channel]||'💬'
   document.getElementById('cv-name').textContent=session.customer_email||session.channel_user_id||shortId(session.id)
-  document.getElementById('cv-meta').textContent=[session.channel,`Mode: ${session.mode}`,session.assigned_agent?`Agent: ${session.assigned_agent}`:null,session.handoff_at?`Handoff: ${relativeTime(session.handoff_at)}`:null].filter(Boolean).join(' · ')
+  document.getElementById('cv-meta').textContent=[session.channel,`Mode: ${session.mode}`,session.assigned_agent?`Agent: ${session.assigned_agent}`:null,session.handoff_at?`Handoff: ${relT(session.handoff_at)}`:null].filter(Boolean).join(' · ')
   renderMessages(messages)
-  document.getElementById('cv-actions').innerHTML=session.mode==='ai'
-    ?`<button class="btn btn-takeover" onclick="takeOver()">⚡ Take over</button>`
-    :`<button class="btn btn-return" onclick="returnToAi()">🤖 Return to AI</button>`
+  document.getElementById('cv-btns').innerHTML=session.mode==='ai'
+    ?`<button class="btn btn-take" onclick="takeOver()">⚡ Take over</button>`
+    :`<button class="btn btn-ret" onclick="retAI()">🤖 Return to AI</button>`
   document.getElementById('reply-bar').classList.toggle('hidden',session.mode!=='agent')
 }
+
 function renderMessages(msgs){
-  const el=document.getElementById('cv-messages')
+  const el=document.getElementById('cv-msgs')
   if(!msgs.length){el.innerHTML='<div class="empty" style="height:100%"><div class="empty-sub">No messages yet</div></div>';return}
   let lastDate=null
   el.innerHTML=msgs.map(m=>{
@@ -442,132 +571,247 @@ function renderMessages(msgs){
     const content=isAgent?m.content.replace('[Agent] ',''):m.content
     const time=new Date(m.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})
     const ds=new Date(m.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'})
-    const divider=ds!==lastDate?(lastDate=ds,`<div class="date-divider">${ds}</div>`):'';
-    const lbl=isAgent?'<div class="msg-sender agent">👤 Agent</div>':(m.role==='assistant'?'<div class="msg-sender medi">🌿 Medi</div>':'')
-    return `${divider}<div class="msg ${cls}">${lbl}<div class="msg-bubble">${escHtml(content)}</div><div class="msg-foot">${time}${m.tokens_used?` · ${m.tokens_used} tokens`:''}</div></div>`
+    const div=ds!==lastDate?(lastDate=ds,`<div class="date-div">${ds}</div>`):'';
+    const sndr=isAgent?'<div class="msg-sndr agent">👤 Agent</div>':(m.role==='assistant'?'<div class="msg-sndr medi">🌿 Medi</div>':'')
+    return`${div}<div class="msg ${cls}">${sndr}<div class="msg-bbl">${escH(content)}</div><div class="msg-foot">${time}${m.tokens_used?` · ${m.tokens_used} tok`:''}</div></div>`
   }).join('')
   el.scrollTop=el.scrollHeight
 }
 
-// AGENT COMMANDS
-function takeOver(){if(!currentSessionId)return;sendWs({type:'take_over',sessionId:currentSessionId});toast('Taking over...','info')}
-function returnToAi(){if(!currentSessionId)return;sendWs({type:'return_to_ai',sessionId:currentSessionId});toast('Returning to Medi...','info')}
-function sendAgentReply(){
-  const inp=document.getElementById('reply-input'),text=inp.value.trim()
-  if(!text||!currentSessionId)return
-  sendWs({type:'agent_message',sessionId:currentSessionId,text})
-  inp.value='';inp.style.height='';toast('Sent ✓','success')
+// ── AGENT COMMANDS ────────────────────────────────────────
+
+function takeOver(){if(!currentSid)return;sendWs({type:'take_over',sessionId:currentSid});toast('Taking over...','info')}
+function retAI(){if(!currentSid)return;sendWs({type:'return_to_ai',sessionId:currentSid});toast('Returning to Medi...','info')}
+
+let typingDebounce=null
+function sendTyping(){
+  if(!currentSid)return
+  sendWs({type:'typing',sessionId:currentSid,text:true})
+  clearTimeout(typingDebounce)
+  typingDebounce=setTimeout(()=>sendWs({type:'typing',sessionId:currentSid,text:false}),2000)
 }
 
-// STATS
+let typingTimer2=null
+function sendTyping(){
+  if(!currentSid)return
+  clearTimeout(typingTimer2)
+  sendWs({type:'agent_typing',sessionId:currentSid})
+  typingTimer2=setTimeout(()=>{},2000)
+}
+function sendReply(){
+  const inp=document.getElementById('reply-inp'),text=inp.value.trim()
+  if(!text||!currentSid)return
+  sendWs({type:'agent_message',sessionId:currentSid,text})
+  inp.value='';inp.style.height='';toast('Sent ✓','success')
+  clearTimeout(typingDebounce)
+  sendWs({type:'typing',sessionId:currentSid,text:false})
+}
+
+// ── STATS ─────────────────────────────────────────────────
+
 async function loadStats(){
   const r=await apiFetch('/api/admin/stats');if(!r)return
-  document.getElementById('stat-total').textContent=r.total??'—'
-  document.getElementById('stat-waiting').textContent=r.waitingForAgent??'—'
-  document.getElementById('stat-today').textContent=r.todaySessions??'—'
+  document.getElementById('st-total').textContent=r.total??'—'
+  document.getElementById('st-wait').textContent=r.waitingForAgent??'—'
+  document.getElementById('st-today').textContent=r.todaySessions??'—'
 }
 
-// KEYWORDS
-async function loadKeywords(){
-  const r=await apiFetch('/api/keywords')
-  if(!r){toast('Could not load keywords','error');return}
+// ── KEYWORDS ─────────────────────────────────────────────
+
+async function loadKw(){
+  const r=await apiFetch('/api/keywords');if(!r)return
   kwData=r.keywords||[]
-  document.getElementById('tab-count-keywords').textContent=kwData.length
-  renderKeywords()
-}
-function renderKeywords(){
+  document.getElementById('tc-keywords').textContent=kwData.length
   const el=document.getElementById('kw-list')
-  if(!kwData.length){el.innerHTML='<div class="kw-empty">No keywords yet — add one above.</div>';return}
-  el.innerHTML=kwData.map(kw=>`
-    <div class="kw-row-item">
-      <span class="kw-code">${escHtml(kw.pattern)}</span>
-      <span class="kw-code term">${escHtml(kw.search_term)}</span>
-      <span class="kw-badge ${kw.category}">${kw.category}</span>
-      <button class="kw-toggle${kw.active?' on':''}" onclick="toggleKeyword('${kw.id}',${!kw.active})" title="${kw.active?'Disable':'Enable'}"></button>
-      <button class="btn-del-kw" onclick="deleteKeyword('${kw.id}')">Delete</button>
-    </div>`).join('')
+  if(!kwData.length){el.innerHTML='<div class="empty" style="padding:30px 0"><div class="empty-sub">No keywords yet</div></div>';return}
+  el.innerHTML=kwData.map(k=>`<div class="table-row kw-grid">
+    <span class="mono">${escH(k.pattern)}</span>
+    <span class="mono hi">${escH(k.search_term)}</span>
+    <span class="badge badge-${k.category}">${k.category}</span>
+    <button class="toggle${k.active?' on':''}" onclick="toggleKw('${k.id}',${!k.active})"></button>
+    <button class="btn-del" onclick="delKw('${k.id}')">Delete</button>
+  </div>`).join('')
 }
-async function addKeyword(){
-  const pattern=document.getElementById('kw-pattern').value.trim()
-  const search_term=document.getElementById('kw-term').value.trim()
-  const category=document.getElementById('kw-cat').value
-  if(!pattern||!search_term){toast('Both fields required','error');return}
-  const r=await apiPost('/api/keywords',{pattern,search_term,category})
-  if(!r){toast('Failed to add','error');return}
-  document.getElementById('kw-pattern').value=''
-  document.getElementById('kw-term').value=''
-  toast('Keyword added ✓','success');loadKeywords()
+async function addKw(){
+  const pat=document.getElementById('kw-pat').value.trim(),term=document.getElementById('kw-term').value.trim(),cat=document.getElementById('kw-cat').value
+  if(!pat||!term){toast('Both fields required','error');return}
+  if(!await apiPost('/api/keywords',{pattern:pat,search_term:term,category:cat})){toast('Failed','error');return}
+  document.getElementById('kw-pat').value='';document.getElementById('kw-term').value=''
+  toast('Keyword added ✓','success');loadKw()
 }
-async function toggleKeyword(id,active){
-  const r=await apiPatch(`/api/keywords/${id}`,{active})
-  if(!r){toast('Update failed','error');return}
-  toast(active?'Enabled':'Disabled','info');loadKeywords()
-}
-async function deleteKeyword(id){
-  if(!confirm('Delete this keyword?'))return
-  const r=await apiDelete(`/api/keywords/${id}`)
-  if(!r){toast('Delete failed','error');return}
-  toast('Deleted','success');loadKeywords()
-}
+async function toggleKw(id,active){if(!await apiPatch(`/api/keywords/${id}`,{active})){toast('Failed','error');return};loadKw()}
+async function delKw(id){if(!confirm('Delete?'))return;if(!await apiDelete(`/api/keywords/${id}`)){toast('Failed','error');return};toast('Deleted','success');loadKw()}
 
-// API HELPERS
-async function apiFetch(p){try{const h=SECRET?{'x-admin-secret':SECRET}:{};const r=await fetch(API+p,{headers:h});return r.ok?r.json():null}catch{return null}}
-async function apiPost(p,b){try{const h={'Content-Type':'application/json',...(SECRET?{'x-admin-secret':SECRET}:{})};const r=await fetch(API+p,{method:'POST',headers:h,body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
-async function apiPatch(p,b){try{const h={'Content-Type':'application/json',...(SECRET?{'x-admin-secret':SECRET}:{})};const r=await fetch(API+p,{method:'PATCH',headers:h,body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
-async function apiDelete(p){try{const h=SECRET?{'x-admin-secret':SECRET}:{};return(await fetch(API+p,{method:'DELETE',headers:h})).ok}catch{return false}}
+// ── QUICK REPLIES ─────────────────────────────────────────
 
-// QUICK REPLIES
-async function loadQuickReplies(){
-  const r=await apiFetch('/api/quick-replies/all')
-  if(!r){toast('Could not load quick replies','error');return}
+async function loadQr(){
+  const r=await apiFetch('/api/quick-replies/all');if(!r)return
   qrData=r.quickReplies||[]
-  document.getElementById('tab-count-qr').textContent=qrData.filter(q=>q.active).length
-  renderQuickReplies()
-}
-function renderQuickReplies(){
+  document.getElementById('tc-qr').textContent=qrData.filter(q=>q.active).length
   const el=document.getElementById('qr-list')
-  if(!qrData.length){el.innerHTML='<div class="qr-empty">No quick replies yet — add one above.</div>';return}
-  el.innerHTML=qrData.map(q=>`
-    <div class="qr-row-item">
-      <span class="qr-label-text">${escHtml(q.label)}</span>
-      <span class="qr-msg-text">${escHtml(q.message)}</span>
-      <span class="qr-order">${q.sort_order}</span>
-      <button class="kw-toggle${q.active?' on':''}" onclick="toggleQr('${q.id}',${!q.active})" title="${q.active?'Disable':'Enable'}"></button>
-      <button class="btn-del-kw" onclick="deleteQr('${q.id}')">Delete</button>
-    </div>`).join('')
+  if(!qrData.length){el.innerHTML='<div class="empty" style="padding:30px 0"><div class="empty-sub">No quick replies yet</div></div>';return}
+  el.innerHTML=qrData.map(q=>`<div class="table-row qr-grid">
+    <span style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH(q.label)}</span>
+    <span class="mono" style="overflow:hidden;text-overflow:ellipsis">${escH(q.message)}</span>
+    <span style="font-size:12px;color:var(--mu);text-align:center">${q.sort_order}</span>
+    <button class="toggle${q.active?' on':''}" onclick="toggleQr('${q.id}',${!q.active})"></button>
+    <button class="btn-del" onclick="delQr('${q.id}')">Delete</button>
+  </div>`).join('')
 }
-async function addQuickReply(){
-  const label=document.getElementById('qr-label').value.trim()
-  const message=document.getElementById('qr-message').value.trim()
-  const sort_order=parseInt(document.getElementById('qr-order').value)||0
-  if(!label||!message){toast('Label and message required','error');return}
-  const r=await apiPost('/api/quick-replies',{label,message,sort_order})
-  if(!r){toast('Failed to add','error');return}
-  document.getElementById('qr-label').value=''
-  document.getElementById('qr-message').value=''
-  document.getElementById('qr-order').value='0'
-  toast('Quick reply added ✓','success');loadQuickReplies()
+async function addQr(){
+  const lbl=document.getElementById('qr-lbl').value.trim(),msg=document.getElementById('qr-msg').value.trim(),ord=parseInt(document.getElementById('qr-ord').value)||0
+  if(!lbl||!msg){toast('Label and message required','error');return}
+  if(!await apiPost('/api/quick-replies',{label:lbl,message:msg,sort_order:ord})){toast('Failed','error');return}
+  document.getElementById('qr-lbl').value='';document.getElementById('qr-msg').value=''
+  toast('Quick reply added ✓','success');loadQr()
 }
-async function toggleQr(id,active){
-  const r=await apiPatch(`/api/quick-replies/${id}`,{active})
-  if(!r){toast('Update failed','error');return}
-  toast(active?'Enabled':'Disabled','info');loadQuickReplies()
-}
-async function deleteQr(id){
-  if(!confirm('Delete this quick reply?'))return
-  const r=await apiDelete(`/api/quick-replies/${id}`)
-  if(!r){toast('Delete failed','error');return}
-  toast('Deleted','success');loadQuickReplies()
+async function toggleQr(id,active){if(!await apiPatch(`/api/quick-replies/${id}`,{active})){toast('Failed','error');return};loadQr()}
+async function delQr(id){if(!confirm('Delete?'))return;if(!await apiDelete(`/api/quick-replies/${id}`)){toast('Failed','error');return};toast('Deleted','success');loadQr()}
+
+// ── ANALYTICS ────────────────────────────────────────────
+
+async function loadAnalytics(){
+  const period=document.getElementById('ana-period')?.value||'30'
+  const r=await apiFetch(`/api/analytics/overview?days=${period}`);if(!r)return
+
+  // Metric cards
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v}
+  set('ana-sessions', r.totals.sessions)
+  set('ana-msgs',     r.totals.messages)
+  set('ana-handoffs', r.totals.handoffs)
+  set('ana-rate',     r.totals.handoffRate+'%')
+  set('ana-tokens',   r.totals.tokens.toLocaleString())
+  set('ana-avg',      r.totals.avgMsgs)
+  set('ana-thumbsup', r.ratings.up)
+  set('ana-thumbsdown',r.ratings.down)
+
+  // Daily sessions sparkline in #ana-chart
+  const chartEl=document.getElementById('ana-chart')
+  if(chartEl){
+    const labels=r.dailySessions.map(d=>d.date.slice(5))
+    const counts=r.dailySessions.map(d=>d.count)
+    if(dailyChart)dailyChart.destroy()
+    dailyChart=new Chart(chartEl,{
+      type:'line',
+      data:{labels,datasets:[{label:'Sessions',data:counts,borderColor:'#187adc',backgroundColor:'rgba(24,122,220,.1)',fill:true,tension:.4,pointRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}},x:{ticks:{maxTicksLimit:10}}}}
+    })
+    chartEl.style.height='180px'
+  }
+
+  // Channel breakdown in #ana-channels
+  const chEl=document.getElementById('ana-channels')
+  if(chEl){
+    const chColors={widget:'#187adc',whatsapp:'#16a34a',messenger:'#7c3aed'}
+    chEl.innerHTML=Object.entries(r.byChannel).map(([ch,cnt])=>`
+      <div style="display:flex;align-items:center;gap:8px;background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;min-width:120px">
+        <div style="width:10px;height:10px;border-radius:50%;background:${chColors[ch]||'#6b85a3'}"></div>
+        <div>
+          <div style="font-weight:600;font-size:14px">${cnt}</div>
+          <div style="font-size:11px;color:var(--mu)">${ch}</div>
+        </div>
+      </div>`).join('')
+  }
 }
 
-// UTILS
+// ── SETTINGS ─────────────────────────────────────────────
+
+const DAYS=['mon','tue','wed','thu','fri','sat','sun']
+const DAY_NAMES={'mon':'Monday','tue':'Tuesday','wed':'Wednesday','thu':'Thursday','fri':'Friday','sat':'Saturday','sun':'Sunday'}
+let bhData=null
+
+async function loadSettings(){
+  const r=await apiFetch('/api/settings/business-hours');if(!r)return
+  bhData=r.businessHours||{enabled:false,timezone:'Asia/Manila',awayMessage:'',hours:{}}
+  const t=document.getElementById('bh-enabled-toggle');if(t)t.classList.toggle('on',!!bhData.enabled)
+  const lbl=document.getElementById('bh-enabled-label');if(lbl)lbl.textContent=bhData.enabled?'Enabled — respecting business hours':'Disabled — handoff always available'
+  const away=document.getElementById('bh-away-msg');if(away)away.value=bhData.awayMessage||''
+  const ir=await apiFetch('/api/settings/idle-minutes')
+  const idleEl=document.getElementById('idle-mins');if(idleEl&&ir)idleEl.value=ir.value||30
+  renderBHRows()
+}
+
+function renderBHRows(){
+  if(!bhData)return
+  document.getElementById('bh-rows').innerHTML=DAYS.map(d=>{
+    const h=bhData.hours?.[d]||{open:false,start:'08:00',end:'18:00'}
+    return`<div class="bh-grid">
+      <span class="bh-day">${DAY_NAMES[d]}</span>
+      <button class="toggle${h.open?' on':''}" id="bh-${d}-open" onclick="toggleDay('${d}')"></button>
+      <input class="bh-input" id="bh-${d}-start" type="time" value="${h.start||'08:00'}">
+      <input class="bh-input" id="bh-${d}-end"   type="time" value="${h.end||'18:00'}">
+    </div>`
+  }).join('')
+}
+
+function toggleDay(d){
+  if(!bhData)return
+  if(!bhData.hours)bhData.hours={}
+  if(!bhData.hours[d])bhData.hours[d]={open:false,start:'08:00',end:'18:00'}
+  bhData.hours[d].open=!bhData.hours[d].open
+  document.getElementById(`bh-${d}-open`).classList.toggle('on',bhData.hours[d].open)
+}
+function toggleBhEnabled(){
+  if(!bhData)return
+  bhData.enabled=!bhData.enabled
+  const t=document.getElementById('bh-enabled-toggle');if(t)t.classList.toggle('on',bhData.enabled)
+  const lbl=document.getElementById('bh-enabled-label');if(lbl)lbl.textContent=bhData.enabled?'Enabled — respecting business hours':'Disabled — handoff always available'
+}
+function toggleBH(){ toggleBhEnabled() }
+async function saveBusinessHours(){
+  const away=document.getElementById('bh-away-msg')?.value||''
+  const hours={}
+  DAYS.forEach(d=>{
+    hours[d]={
+      open:  document.getElementById(`bh-${d}-open`)?.classList.contains('on')||false,
+      start: document.getElementById(`bh-${d}-start`)?.value||'08:00',
+      end:   document.getElementById(`bh-${d}-end`)?.value||'18:00'
+    }
+  })
+  const payload={enabled:bhData?.enabled||false,timezone:'Asia/Manila',awayMessage:away,hours}
+  const r=await apiPut('/api/settings/business-hours',payload)
+  if(!r){toast('Save failed','error');return}
+  bhData={...bhData,...payload}
+  toast('Business hours saved ✓','success')
+}
+function saveBH(){ saveBusinessHours() }
+async function saveIdle(){
+  const mins=parseInt(document.getElementById('idle-mins').value)||30
+  const r=await apiPut('/api/settings/idle-minutes',{value:mins})
+  if(!r){toast('Save failed','error');return}
+  toast('Idle timeout saved ✓','success')
+}
+
+// Notification sound
+let soundEnabled=true
+function toggleSound(){
+  soundEnabled=!soundEnabled
+  document.getElementById('sound-toggle')?.classList.toggle('on',soundEnabled)
+  const lbl=document.getElementById('sound-lbl')
+  if(lbl)lbl.textContent=soundEnabled?'Sound notifications enabled':'Sound notifications disabled'
+}
+function testSound(){playNotif()}
+
+// ── API HELPERS ───────────────────────────────────────────
+
+const H=()=>({...(SECRET?{'x-admin-secret':SECRET}:{})})
+const HJ=()=>({...H(),'Content-Type':'application/json'})
+async function apiFetch(p){try{const r=await fetch(API+p,{headers:H()});return r.ok?r.json():null}catch{return null}}
+async function apiPost(p,b){try{const r=await fetch(API+p,{method:'POST',headers:HJ(),body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
+async function apiPatch(p,b){try{const r=await fetch(API+p,{method:'PATCH',headers:HJ(),body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
+async function apiPut(p,b){try{const r=await fetch(API+p,{method:'PUT',headers:HJ(),body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
+async function apiDelete(p){try{return(await fetch(API+p,{method:'DELETE',headers:H()})).ok}catch{return false}}
+
+// ── UTILS ─────────────────────────────────────────────────
+
 function shortId(id){return id?id.slice(0,8)+'…':'—'}
-function relativeTime(iso){if(!iso)return'—';const d=Date.now()-new Date(iso).getTime();if(d<60000)return'just now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`}
-function escHtml(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
-function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px'}
+function relT(iso){if(!iso)return'—';const d=Date.now()-new Date(iso).getTime();if(d<60000)return'just now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`}
+function escH(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,110)+'px'}
 function toast(msg,type='info'){const c=document.getElementById('toasts'),t=document.createElement('div');t.className=`toast ${type}`;t.textContent=msg;c.appendChild(t);setTimeout(()=>t.remove(),3500)}
 
-// INIT
+// ── INIT ──────────────────────────────────────────────────
+
 connectWs()
 setInterval(()=>{loadStats();loadSessions()},30000)
 </script>

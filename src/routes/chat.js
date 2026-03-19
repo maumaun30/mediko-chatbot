@@ -1,4 +1,5 @@
 import { createSession, sessionExists, getSessionMode, loadHistory, saveMessagePair, getFullHistory } from '../services/sessionService.js'
+import { isWithinBusinessHours, getBusinessHours } from '../services/settingsService.js'
 import { processMessage } from '../services/conversationManager.js'
 import { buildMessages }  from '../services/promptService.js'
 import { streamChat }     from '../services/openaiService.js'
@@ -92,7 +93,15 @@ export default async function chatRoutes(fastify) {
     }
 
     if (decision.type === 'handoff_requested') {
-      send({ type: 'handoff', message: 'Sandali lang po. Ikinokonekta ko kayo sa aming team. Maaaring may ilang minuto bago sumagot ang ahente.' })
+      const isOpen = await isWithinBusinessHours()
+      if (!isOpen) {
+        const bh = await getBusinessHours()
+        const awayMsg = bh?.away_message || 'Pasensya na po, wala pa kaming available na agent ngayon. Maaari kayong mag-iwan ng mensahe at babalik kami sa inyo sa susunod na araw ng negosyo.'
+        send({ type: 'chunk', text: awayMsg })
+        send({ type: 'done', tokens: 0 })
+      } else {
+        send({ type: 'handoff', message: 'Sandali lang po. Ikinokonekta ko kayo sa aming team. Maaaring may ilang minuto bago sumagot ang ahente.' })
+      }
       reply.raw.end()
       return
     }

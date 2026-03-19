@@ -19,8 +19,10 @@
  */
 
 import { WebSocketServer } from 'ws'
+import { supabase } from '../db/supabase.js'
 import { setSessionMode, saveAgentMessage } from './sessionService.js'
 import { dispatchReply, dispatchHandoffReturn } from './responseDispatcher.js'
+import { getIdleMinutes } from './settingsService.js'
 
 /** @type {Set<import('ws').WebSocket>} */
 const agentConnections = new Set()
@@ -73,6 +75,28 @@ export function pushToWidget(sessionId, event) {
  *
  * @param {import('http').Server} httpServer
  */
+// ── Idle session auto-close ──────────────────────────────────
+
+export async function closeIdleSessions() {
+  try {
+    const idleMins = await getIdleMinutes()
+    const cutoff   = new Date(Date.now() - idleMins * 60_000).toISOString()
+    const { data }  = await supabase
+      .from('chat_sessions')
+      .select('id')
+      .eq('mode', 'agent')
+      .lt('last_active', cutoff)
+    if (!data?.length) return
+    for (const session of data) {
+      await setSessionMode(session.id, 'ai', { clearAgent: true })
+      pushToWidget(session.id, { type: 'mode_changed', mode: 'ai' })
+      await notifyAgentInbox({ type: 'mode_changed', sessionId: session.id, mode: 'ai', initiatedBy: 'idle_timeout' })
+    }
+  } catch (e) {
+    console.error('[agentService] closeIdleSessions:', e.message)
+  }
+}
+
 export function setupAgentWebSocket(httpServer) {
   const wss = new WebSocketServer({ noServer: true })
 
@@ -156,6 +180,32 @@ async function handleAgentCommand(cmd) {
 
       // Push agent reply to any widget SSE connections on this session
       pushToWidget(sessionId, { type: 'agent_message', text })
+      break
+    }
+
+    case 'typing': {
+      // Agent is typing — push indicator to widget via Supabase Realtime
+      // We broadcast a lightweight event without saving to DB
+      pushToWidget(sessionId, { type: 'agent_typing', value: !!cmd.value })
+      break
+    }
+
+    case 'typing': {
+      // Agent is typing — push to widget via Supabase Realtime broadcast
+      // We save a temporary marker that the widget picks up
+      pushToWidget(sessionId, { type: 'agent_typing', typing: !!text })
+      break
+    }
+
+    case 'typing': {
+      // Agent started/stopped typing — push to widget in real time
+      pushToWidget(sessionId, { type: 'agent_typing', isTyping: cmd.isTyping === true })
+      break
+    }
+
+    case 'agent_typing': {
+      // Broadcast typing indicator to widget
+      pushToWidget(sessionId, { type: 'agent_typing' })
       break
     }
 
