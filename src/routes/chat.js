@@ -98,7 +98,10 @@ export default async function chatRoutes(fastify) {
     }
 
     if (decision.type === 'agent') {
-      send({ type: 'agent_mode', message: 'Ang inyong mensahe ay natanggap ng aming team. Makikipag-ugnayan kami sa inyo sa lalong madaling panahon.' })
+      // Session is in agent mode — message forwarded silently to agent inbox.
+      // No confirmation message here to avoid spam; the initial handoff message
+      // already told the customer an agent is handling the conversation.
+      send({ type: 'agent_ack' })
       reply.raw.end()
       return
     }
