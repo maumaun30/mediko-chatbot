@@ -7,9 +7,11 @@ function requireAuth(req, reply, done) {
   done()
 }
 export default async function settingsRoutes(fastify) {
-  fastify.addHook('onRequest', requireAuth)
+  // GETs are public — no secrets exposed, widget needs business hours status
   fastify.get('/business-hours', async (req, reply) => reply.send({ businessHours: await getBusinessHours() }))
-  fastify.put('/business-hours', async (req, reply) => { await saveBusinessHours(req.body); return reply.send({ success: true }) })
   fastify.get('/idle-minutes',   async (req, reply) => reply.send({ value: await getIdleMinutes() }))
-  fastify.put('/idle-minutes',   async (req, reply) => { const mins=parseInt(req.body?.value)||30; await saveIdleMinutes(mins); return reply.send({ success: true, value: mins }) })
+
+  // PUTs require admin auth
+  fastify.put('/business-hours', { onRequest: requireAuth }, async (req, reply) => { await saveBusinessHours(req.body); return reply.send({ success: true }) })
+  fastify.put('/idle-minutes',   { onRequest: requireAuth }, async (req, reply) => { const mins=parseInt(req.body?.value)||30; await saveIdleMinutes(mins); return reply.send({ success: true, value: mins }) })
 }
