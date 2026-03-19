@@ -362,6 +362,16 @@ header{background:linear-gradient(135deg,#187adc,#115fa8);padding:0 24px;height:
       <button class="btn-primary" onclick="saveIdle()" style="margin-top:10px">Save</button>
     </div>
 
+    <!-- Notifications -->
+    <div class="form-card">
+      <div class="section-title">🔔 Notifications</div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <button class="toggle on" id="sound-toggle" onclick="toggleSound()"></button>
+        <span style="font-size:13px;color:var(--tx)" id="sound-lbl">Sound notifications enabled</span>
+        <button class="btn-primary" onclick="testSound()" style="margin-left:auto;padding:7px 16px;font-size:12px;height:auto">🔊 Test sound</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -369,73 +379,7 @@ header{background:linear-gradient(135deg,#187adc,#115fa8);padding:0 24px;height:
   <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFhYqKioqHh4eHiIiJiYqKi4uMjIyNjY2Njo6Pj4+QkJCRkZGSkpKTk5OUlJSVlZWWlpaXl5eYmJiZmZmampqbm5ucnJydnZ2enp6fn5+goKChoaGioqKjo6OkpKSlpaWmpqanp6eoqKipqamqqqqrq6usrKytra2urq6vr6+wsLCxsbGysrKzs7O0tLS1tbW2tra3t7e4uLi5ubm6urq7u7u8vLy9vb2+vr6/v7/AwMDBwcHCwsLDw8PExMTFxcXGxsbHx8fIyMjJycnKysrLy8vMzMzNzc3Ozs7Pz8/Q0NDR0dHS0tLT09PU1NTV1dXW1tbX19fY2NjZ2dna2trb29vc3Nzd3d3e3t7f39/g4ODh4eHi4uLj4+Pk5OTl5eXm5ubn5+fo6Ojp6enq6urr6+vs7Ozt7e3u7u7v7+/w8PDx8fHy8vLz8/P09PT19fX29vb39/f4+Pj5+fn6+vr7+/v8/Pz9/f3+/v4=" type="audio/wav">
 </audio>
 
-<!-- ANALYTICS -->
-<div class="tab-body" id="tab-analytics">
-  <div class="kw-layout">
-    <div style="display:flex;gap:12px;flex-wrap:wrap;flex-shrink:0" id="analytics-cards">
-      <div class="ana-card"><div class="ana-val" id="ana-sessions">—</div><div class="ana-lbl">Sessions</div></div>
-      <div class="ana-card"><div class="ana-val" id="ana-messages">—</div><div class="ana-lbl">Messages</div></div>
-      <div class="ana-card"><div class="ana-val urgent" id="ana-handoffs">—</div><div class="ana-lbl">Handoffs</div></div>
-      <div class="ana-card"><div class="ana-val" id="ana-tokens">—</div><div class="ana-lbl">Tokens used</div></div>
-      <div class="ana-card"><div class="ana-val" id="ana-thumbsup">—</div><div class="ana-lbl">👍 Helpful</div></div>
-      <div class="ana-card"><div class="ana-val" id="ana-thumbsdown">—</div><div class="ana-lbl">👎 Not helpful</div></div>
-    </div>
-    <div class="kw-table-card" style="flex-shrink:0">
-      <div style="padding:12px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Sessions per day</div>
-      <div style="padding:16px;height:200px"><canvas id="ana-daily-chart"></canvas></div>
-    </div>
-    <div class="kw-table-card" style="flex-shrink:0">
-      <div style="padding:12px 16px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">Channel breakdown</div>
-      <div style="padding:16px;height:200px"><canvas id="ana-channel-chart"></canvas></div>
-    </div>
-    <div style="padding:0 0 8px;display:flex;gap:10px;align-items:center;flex-shrink:0">
-      <span style="font-size:12px;color:var(--muted)">Period:</span>
-      <select id="ana-period" style="background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-family:'Poppins',sans-serif;font-size:12px" onchange="loadAnalytics()">
-        <option value="7">Last 7 days</option>
-        <option value="30" selected>Last 30 days</option>
-        <option value="90">Last 90 days</option>
-      </select>
-    </div>
-  </div>
-</div>
 
-<!-- SETTINGS -->
-<div class="tab-body" id="tab-settings">
-  <div class="kw-layout">
-    <!-- Business hours -->
-    <div class="kw-add-card">
-      <h3>🕐 Business Hours</h3>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        <button class="kw-toggle" id="bh-enabled-toggle" onclick="toggleBhEnabled()"></button>
-        <span style="font-size:13px;color:var(--text)" id="bh-enabled-label">Disabled — handoff always available</span>
-      </div>
-      <div id="bh-hours-grid" style="display:grid;grid-template-columns:80px 1fr 1fr 80px;gap:8px;align-items:center;font-size:13px;margin-bottom:14px">
-        <span style="font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase">Day</span>
-        <span style="font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase">Open</span>
-        <span style="font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase">Hours</span>
-        <span></span>
-      </div>
-      <div id="bh-days"></div>
-      <div style="margin-top:14px">
-        <label class="kw-label">Away message (shown to customers outside hours)</label>
-        <input class="kw-input" id="bh-away-msg" placeholder="Pasensya na po, wala kaming available na agent ngayon..." style="margin-top:6px">
-      </div>
-      <div style="margin-top:12px;display:flex;gap:10px">
-        <button class="btn-add-kw" onclick="saveBusinessHours()">Save business hours</button>
-      </div>
-    </div>
-
-    <!-- Notification sound -->
-    <div class="kw-add-card">
-      <h3>🔔 Notifications</h3>
-      <div style="display:flex;align-items:center;gap:10px">
-        <button class="kw-toggle on" id="sound-toggle" onclick="toggleSound()"></button>
-        <span style="font-size:13px;color:var(--text)" id="sound-label">Sound notifications enabled</span>
-        <button class="btn-add-qr" onclick="testSound()" style="margin-left:auto;padding:6px 14px;font-size:12px">Test sound</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <div class="toast-container" id="toasts"></div>
 
