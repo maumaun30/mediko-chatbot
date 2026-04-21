@@ -1,0 +1,41 @@
+name: Deploy to CloudPanel
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: SSH deploy via PM2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo "→ Pulling latest code..."
+            git pull origin main
+
+            echo "→ Installing production dependencies..."
+            npm ci --omit=dev
+
+            echo "→ Creating logs directory..."
+            mkdir -p logs
+
+            echo "→ Reloading PM2 process..."
+            pm2 reload ecosystem.config.cjs --env production --update-env \
+              || pm2 start ecosystem.config.cjs --env production
+
+            echo "→ Saving PM2 process list..."
+            pm2 save
+
+            echo "✓ Deployment complete"
