@@ -547,6 +547,13 @@ function sendReply(){
   inp.value='';inp.style.height='';toast('Sent ✓','success')
   clearTimeout(typingDebounce)
   sendWs({type:'typing',sessionId:currentSid,text:false})
+  // Optimistically append message so it appears immediately without waiting for WS round-trip
+  const el=document.getElementById('cv-msgs')
+  if(el){
+    const time=new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})
+    el.insertAdjacentHTML('beforeend',`<div class="msg agent-msg"><div class="msg-sndr agent">👤 Agent</div><div class="msg-bbl">${escH(text)}</div><div class="msg-foot">${time}</div></div>`)
+    el.scrollTop=el.scrollHeight
+  }
 }
 
 // ── STATS ─────────────────────────────────────────────────
