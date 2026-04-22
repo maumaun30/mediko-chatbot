@@ -193,9 +193,38 @@ header{background:linear-gradient(135deg,#187adc,#115fa8);padding:0 24px;height:
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
+
+/* LOGIN OVERLAY */
+.login-overlay{position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+.login-overlay.hidden{display:none}
+.login-card{background:var(--sur);border:1px solid var(--bdr);border-radius:16px;padding:30px;width:100%;max-width:380px;box-shadow:0 8px 28px rgba(24,122,220,.12)}
+.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.login-logo .logo-icon{width:34px;height:34px;background:var(--s);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.login-logo h2{font-size:17px;font-weight:700;color:var(--tx)}
+.login-sub{font-size:12px;color:var(--mu);margin:6px 0 18px}
+.login-input{width:100%;background:var(--sur2);border:1.5px solid var(--bdr);border-radius:10px;padding:11px 14px;font-size:14px;font-family:'Poppins',sans-serif;color:var(--tx);outline:none;margin-bottom:10px;transition:border-color .2s}
+.login-input:focus{border-color:var(--p);box-shadow:0 0 0 3px rgba(24,122,220,.1)}
+.login-err{color:var(--rd);font-size:12px;margin:0 0 10px}
+.login-err.hidden{display:none}
+.login-btn{width:100%;background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:transform .2s,box-shadow .2s;box-shadow:0 3px 10px rgba(24,122,220,.3)}
+.login-btn:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(24,122,220,.4)}
+.login-btn:disabled{opacity:.6;cursor:wait;transform:none}
+.btn-logout{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:500;font-family:'Poppins',sans-serif;cursor:pointer;transition:background .2s}
+.btn-logout:hover{background:rgba(255,255,255,.25)}
 </style>
 </head>
 <body>
+
+<!-- Login overlay (shown until a valid password has been stored in sessionStorage) -->
+<div id="login-screen" class="login-overlay">
+  <div class="login-card">
+    <div class="login-logo"><div class="logo-icon">🌿</div><h2>Mediko Dashboard</h2></div>
+    <p class="login-sub">Enter your admin password to continue.</p>
+    <input id="pw-input" class="login-input" type="password" placeholder="Password" autocomplete="current-password" />
+    <p id="login-error" class="login-err hidden">Incorrect password.</p>
+    <button id="login-btn" class="login-btn" onclick="doLogin()">Login</button>
+  </div>
+</div>
 
 <header>
   <div class="logo"><div class="logo-icon">🌿</div>Mediko Agent Dashboard</div>
@@ -206,6 +235,7 @@ header{background:linear-gradient(135deg,#187adc,#115fa8);padding:0 24px;height:
       <div class="stat"><div class="stat-val" id="st-today">—</div><div class="stat-lbl">Today</div></div>
     </div>
     <div class="ws-pill"><div class="ws-dot" id="ws-dot"></div><span id="ws-lbl">Connecting...</span></div>
+    <button class="btn-logout" onclick="doLogout()">Logout</button>
   </div>
 </header>
 
@@ -382,10 +412,57 @@ header{background:linear-gradient(135deg,#187adc,#115fa8);padding:0 24px;height:
 <div class="toast-container" id="toasts"></div>
 
 <script>
-const API='', SECRET=new URLSearchParams(location.search).get('secret')??''
+const API=''
+const TOKEN_KEY='mediko_dashboard_secret'
+let SECRET=sessionStorage.getItem(TOKEN_KEY)||''
 const WS_URL=`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/agent/ws`
 let ws=null,currentSid=null,allSessions=[],wsTimer=null
-let kwData=[],qrData=[],unread={},typingTimer=null,dailyChart=null,channelChart=null
+let kwData=[],qrData=[],unread={},typingTimer=null,dailyChart=null,channelChart=null,booted=false
+
+// ── AUTH ──────────────────────────────────────────────────
+
+async function doLogin(){
+  const pw=document.getElementById('pw-input').value.trim()
+  const errEl=document.getElementById('login-error')
+  const btn=document.getElementById('login-btn')
+  errEl.classList.add('hidden')
+  if(!pw)return
+  btn.disabled=true;btn.textContent='Checking...'
+  try{
+    const r=await fetch(API+'/api/admin/stats',{headers:{'x-admin-secret':pw}})
+    if(r.status===401||r.status===403){errEl.textContent='Incorrect password.';errEl.classList.remove('hidden');return}
+    if(!r.ok){errEl.textContent=`Server error ${r.status}.`;errEl.classList.remove('hidden');return}
+    SECRET=pw
+    sessionStorage.setItem(TOKEN_KEY,pw)
+    hideLogin()
+    bootDashboard()
+  }catch(e){
+    errEl.textContent='Network error.'
+    errEl.classList.remove('hidden')
+  }finally{
+    btn.disabled=false;btn.textContent='Login'
+  }
+}
+
+function doLogout(){
+  sessionStorage.removeItem(TOKEN_KEY)
+  SECRET=''
+  if(ws){ws.onclose=null;try{ws.close()}catch{};ws=null}
+  clearTimeout(wsTimer)
+  booted=false
+  document.getElementById('pw-input').value=''
+  document.getElementById('login-error').classList.add('hidden')
+  document.getElementById('login-screen').classList.remove('hidden')
+}
+
+function hideLogin(){document.getElementById('login-screen').classList.add('hidden')}
+
+function bootDashboard(){
+  if(booted)return
+  booted=true
+  connectWs()
+  setInterval(()=>{loadStats();loadSessions()},30000)
+}
 
 // ── TABS ──────────────────────────────────────────────────
 
@@ -745,11 +822,12 @@ function testSound(){playNotif()}
 
 const H=()=>({...(SECRET?{'x-admin-secret':SECRET}:{})})
 const HJ=()=>({...H(),'Content-Type':'application/json'})
-async function apiFetch(p){try{const r=await fetch(API+p,{headers:H()});return r.ok?r.json():null}catch{return null}}
-async function apiPost(p,b){try{const r=await fetch(API+p,{method:'POST',headers:HJ(),body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
-async function apiPatch(p,b){try{const r=await fetch(API+p,{method:'PATCH',headers:HJ(),body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
-async function apiPut(p,b){try{const r=await fetch(API+p,{method:'PUT',headers:HJ(),body:JSON.stringify(b)});return r.ok?r.json():null}catch{return null}}
-async function apiDelete(p){try{return(await fetch(API+p,{method:'DELETE',headers:H()})).ok}catch{return false}}
+function checkAuth(r){if(r&&(r.status===401||r.status===403)){doLogout();return false}return true}
+async function apiFetch(p){try{const r=await fetch(API+p,{headers:H()});if(!checkAuth(r))return null;return r.ok?r.json():null}catch{return null}}
+async function apiPost(p,b){try{const r=await fetch(API+p,{method:'POST',headers:HJ(),body:JSON.stringify(b)});if(!checkAuth(r))return null;return r.ok?r.json():null}catch{return null}}
+async function apiPatch(p,b){try{const r=await fetch(API+p,{method:'PATCH',headers:HJ(),body:JSON.stringify(b)});if(!checkAuth(r))return null;return r.ok?r.json():null}catch{return null}}
+async function apiPut(p,b){try{const r=await fetch(API+p,{method:'PUT',headers:HJ(),body:JSON.stringify(b)});if(!checkAuth(r))return null;return r.ok?r.json():null}catch{return null}}
+async function apiDelete(p){try{const r=await fetch(API+p,{method:'DELETE',headers:H()});if(!checkAuth(r))return false;return r.ok}catch{return false}}
 
 // ── UTILS ─────────────────────────────────────────────────
 
@@ -761,8 +839,14 @@ function toast(msg,type='info'){const c=document.getElementById('toasts'),t=docu
 
 // ── INIT ──────────────────────────────────────────────────
 
-connectWs()
-setInterval(()=>{loadStats();loadSessions()},30000)
+document.getElementById('pw-input').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()})
+
+if(SECRET){
+  hideLogin()
+  bootDashboard()
+}else{
+  document.getElementById('pw-input').focus()
+}
 </script>
 </body>
 </html>

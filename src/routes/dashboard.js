@@ -2,7 +2,10 @@
  * dashboard.js
  *
  * Serves the admin dashboard HTML at /dashboard.
- * Optionally protected by ADMIN_SECRET query param.
+ * The HTML is public; auth happens client-side via a login overlay
+ * that validates the password against an authed API endpoint and stores
+ * it in sessionStorage. All /api/admin/* and /api/{keywords,quick-replies,
+ * analytics,settings}/* routes are gated by ADMIN_SECRET.
  */
 
 import { readFileSync } from 'fs'
@@ -15,16 +18,6 @@ const HTML = readFileSync(join(__dirname, '../dashboard/index.html'), 'utf8')
 export default async function dashboardRoutes(fastify) {
 
   fastify.get('/dashboard', async (request, reply) => {
-    const secret = process.env.ADMIN_SECRET
-    if (secret) {
-      const token = request.query.secret ?? request.headers['x-admin-secret']
-      if (token !== secret) {
-        return reply
-          .status(401)
-          .header('Content-Type', 'text/html')
-          .send('<h2>401 — Add ?secret=YOUR_ADMIN_SECRET to the URL</h2>')
-      }
-    }
     return reply.header('Content-Type', 'text/html').send(HTML)
   })
 
