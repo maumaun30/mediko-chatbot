@@ -34,6 +34,16 @@ const historySchema = {
 
 export default async function chatRoutes(fastify) {
 
+  // GET /api/chat/config — public widget config (AI kill-switch, etc.)
+  fastify.get('/config', async (_request, reply) => {
+    const aiEnabled = process.env.AI_ENABLED !== 'false'
+    return reply.send({
+      aiEnabled,
+      aiDisabledMessage: aiEnabled ? null : (process.env.AI_DISABLED_MESSAGE || null)
+    })
+  })
+
+
   // POST /api/chat/session
   fastify.post('/session', { schema: sessionCreateSchema }, async (request, reply) => {
     const { customerEmail, metadata } = request.body || {}
@@ -123,6 +133,16 @@ export default async function chatRoutes(fastify) {
     }
 
     // ── 5. AI mode — stream OpenAI response ─────────────────
+    if (process.env.AI_ENABLED === 'false') {
+      const fallback = process.env.AI_DISABLED_MESSAGE
+        || "Pasensya na po, ang aming AI assistant ay pansamantalang hindi available. Paki-click po ang 'Talk to agent' button para makausap ang aming team."
+      send({ type: 'chunk', text: fallback })
+      send({ type: 'done', tokens: 0 })
+      await saveMessagePair(decision.sessionId, decision.text, fallback, 0)
+      reply.raw.end()
+      return
+    }
+
     try {
       const history  = await loadHistory(decision.sessionId)
       const messages = buildMessages({ userMessage: decision.text, history, products: decision.products ?? [], order: decision.order ?? null, channel: 'widget' })

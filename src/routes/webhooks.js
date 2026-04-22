@@ -160,6 +160,16 @@ async function handleInboundMessage(msg, log) {
       break
 
     case 'ai': {
+      // AI kill-switch — when off, return a static fallback instead of calling OpenAI.
+      if (process.env.AI_ENABLED === 'false') {
+        const fallback = process.env.AI_DISABLED_MESSAGE
+          || "Pasensya na po, ang aming AI assistant ay pansamantalang hindi available. Paki-click po ang 'Talk to agent' button para makausap ang aming team."
+        await dispatchReply(channel, channelUserId, fallback)
+        await saveMessagePair(decision.sessionId, decision.text, fallback, 0)
+        log.info({ sessionId, channel }, 'AI disabled — sent fallback')
+        break
+      }
+
       // ── 2. Show typing indicator ─────────────────────────
       await sendTypingIndicator(channel, channelUserId)
 
