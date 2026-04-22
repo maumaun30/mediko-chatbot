@@ -2,7 +2,7 @@ name: Deploy to CloudPanel
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   deploy:
@@ -23,7 +23,7 @@ jobs:
             cd ${{ secrets.DEPLOY_PATH }}
 
             echo "→ Pulling latest code..."
-            git pull origin main
+            git pull origin master
 
             echo "→ Installing production dependencies..."
             npm ci --omit=dev
