@@ -29,10 +29,14 @@ export default fp(async function staticFiles(fastify) {
   await fastify.register(fastifyStatic, {
     root:   PUBLIC_DIR,
     prefix: '/static/',
+    etag: true,
+    lastModified: true,
     // Allow cross-origin loads from Shopify storefront
     setHeaders: (res) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
-      res.setHeader('Cache-Control', 'public, max-age=86400')  // 1 day cache
+      // Revalidate every request via ETag — prevents stale widget after re-deploys.
+      // Consumers can still opt into long caching by referencing ?v=<hash>.
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
     }
   })
 })
