@@ -98,3 +98,55 @@ test('shouldClearSession only on 404', async () => {
   assert.equal(shouldClearSession(null), false, 'network error (no status) keeps the session')
   assert.equal(shouldClearSession(undefined), false)
 })
+
+test('tokenizeLinks: bare http(s) URLs become links, trailing punctuation stays text', async () => {
+  const { tokenizeLinks } = await import('../../mediko-widget/src/linkify.js')
+  assert.deepEqual(tokenizeLinks('Track it here: https://track.ph/abc?x=1. Salamat!'), [
+    { type: 'text', text: 'Track it here: ' },
+    { type: 'link', href: 'https://track.ph/abc?x=1', label: 'https://track.ph/abc?x=1' },
+    { type: 'text', text: '. Salamat!' }
+  ])
+  assert.deepEqual(tokenizeLinks('(see http://a.ph/b)'), [
+    { type: 'text', text: '(see ' },
+    { type: 'link', href: 'http://a.ph/b', label: 'http://a.ph/b' },
+    { type: 'text', text: ')' }
+  ])
+  const product = tokenizeLinks('https://store.mediko.ph/products/vit-c')
+  assert.deepEqual(product, [{ type: 'link', href: 'https://store.mediko.ph/products/vit-c', label: 'https://store.mediko.ph/products/vit-c' }])
+})
+
+test('tokenizeLinks: markdown links, product cards and no other schemes', async () => {
+  const { tokenizeLinks, safeHref } = await import('../../mediko-widget/src/linkify.js')
+  assert.deepEqual(tokenizeLinks('[Order](https://x.ph/o/1) and [Vit C](https://store.mediko.ph/products/c)'), [
+    { type: 'link', href: 'https://x.ph/o/1', label: 'Order' },
+    { type: 'text', text: ' and ' },
+    { type: 'product', href: 'https://store.mediko.ph/products/c', label: 'Vit C' }
+  ])
+  for (const t of ['javascript:alert(1)', '[x](javascript:alert(1))', 'data:text/html,<b>', 'ftp://x.ph/f', 'mailto:a@b.ph', 'www.mediko.ph']) {
+    assert.ok(tokenizeLinks(t).every(tok => tok.type === 'text'), t)
+    assert.equal(tokenizeLinks(t).map(tok => tok.text).join(''), t, `${t} kept verbatim`)
+  }
+  assert.equal(safeHref('javascript:alert(1)'), null)
+  assert.equal(safeHref('https://ok.ph'), 'https://ok.ph')
+  assert.deepEqual(tokenizeLinks(''), [])
+  assert.deepEqual(tokenizeLinks('just text'), [{ type: 'text', text: 'just text' }])
+})
+
+test('Message.jsx renders links through tokenizeLinks with safe rel/target', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../../mediko-widget/src/components/Message.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes('tokenizeLinks(text)'))
+  assert.ok(!/silently dropped/.test(src))
+  assert.match(src, /href=\{tok\.href\} target="_blank" rel="noopener noreferrer"/)
+})
+
+test('a 404 on send shows local Filipino copy, not the server text', async () => {
+  const { SESSION_GONE } = await import('../../mediko-widget/src/messages.js')
+  assert.match(SESSION_GONE, /po/)
+  assert.ok(!/session|refresh/i.test(SESSION_GONE))
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../../mediko-widget/src/hooks/useChat.js', import.meta.url), 'utf8')
+  const branch = src.slice(src.indexOf('if (res.status === 404) {'), src.indexOf('if (!res.ok) {', src.indexOf('if (res.status === 404) {')))
+  assert.ok(branch.includes('setError(SESSION_GONE)'))
+  assert.ok(!branch.includes('readError'))
+})
