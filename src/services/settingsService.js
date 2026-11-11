@@ -32,8 +32,6 @@ async function setSetting(key, value) {
 
 export async function getBusinessHours()    { return await getSetting('business_hours') }
 export async function saveBusinessHours(v)  { return await setSetting('business_hours', v) }
-export async function getIdleMinutes()      { const s = await getSetting('idle_minutes'); return s?.value ?? 30 }
-export async function saveIdleMinutes(mins) { return await setSetting('idle_minutes', { value: mins }) }
 
 export async function isWithinBusinessHours() {
   return isOpenAt(await getBusinessHours(), new Date())
