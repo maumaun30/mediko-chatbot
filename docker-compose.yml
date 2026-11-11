@@ -2,7 +2,7 @@
 # Local dev:   docker compose up --build
 # Production:  same, behind a CloudPanel reverse-proxy site → 127.0.0.1:3001
 #
-# Secrets (OPENAI_API_KEY, SHOPIFY_*, ADMIN_SECRET, …) are read from .env
+# Secrets (OPENAI_API_KEY, SHOPIFY_*, CHAT_AGENT_SECRET, …) are read from .env
 # via env_file. DB connection + HOST/NODE_ENV are overridden below so the
 # api container talks to the "db" service regardless of what .env says.
 

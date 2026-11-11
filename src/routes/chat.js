@@ -2,6 +2,7 @@ import { createSession, sessionExists, getSessionMode, loadHistory, saveMessageP
 import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
 import { normalizePhMobile } from '../services/phone.js'
 import { verifyChatLink } from '../services/agentAuth.js'
+import { corsOriginFor } from '../plugins/security.js'
 import { hooks } from '../services/chatEvents.js'
 import { processMessage } from '../services/conversationManager.js'
 import { buildMessages }  from '../services/promptService.js'
@@ -12,11 +13,7 @@ import { spamCheck, consumeAiQuota, throttleMessage } from '../services/aiRateLi
 
 // Open an SSE stream with the right CORS header (reply.raw bypasses @fastify/cors).
 function openSSE(request, reply) {
-  const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
-  const requestOrigin = request.headers.origin || ''
-  const corsOrigin = allowedOrigin === '*'
-    ? '*'
-    : (requestOrigin === allowedOrigin ? requestOrigin : '')
+  const corsOrigin = corsOriginFor(request.headers.origin)
 
   reply.raw.writeHead(200, {
     'Content-Type':                'text/event-stream',
@@ -97,6 +94,9 @@ export default async function chatRoutes(fastify) {
   // POST /api/chat/session
   fastify.post('/session', { schema: sessionCreateSchema }, async (request, reply) => {
     const { customerName, customerEmail, customerPhone, metadata } = request.body
+    if (!customerName.trim()) {
+      return reply.status(400).send({ error: 'Pakilagay po ang inyong pangalan.' })
+    }
     const phone = normalizePhMobile(customerPhone)
     if (!phone) {
       return reply.status(400).send({ error: 'Pakilagay po ang tamang mobile number (09XXXXXXXXX).' })
@@ -316,12 +316,7 @@ export default async function chatRoutes(fastify) {
     const valid = await sessionExists(sessionId)
     if (!valid) return reply.status(404).send({ error: 'Session not found' })
 
-    // Always allow the configured origin (same logic as /api/chat)
-    const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
-    const requestOrigin = request.headers.origin || ''
-    const corsOrigin = (allowedOrigin === '*' || !allowedOrigin)
-      ? '*'
-      : requestOrigin === allowedOrigin ? requestOrigin : allowedOrigin
+    const corsOrigin = corsOriginFor(request.headers.origin)
 
     reply.raw.writeHead(200, {
       'Content-Type':                  'text/event-stream',

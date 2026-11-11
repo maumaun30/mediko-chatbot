@@ -17,8 +17,8 @@ export function verifyAgentToken(token, secret = process.env.CHAT_AGENT_SECRET) 
   const key = usable(secret)
   if (!key || typeof token !== 'string' || !token) return null
   try {
-    const p = jwt.verify(token, key, { algorithms: ['HS256'], issuer: ISSUER, audience: AUDIENCE })
-    if (!p || p.sub == null || p.sub === '') return null
+    const p = jwt.verify(token, key, { algorithms: ['HS256'], issuer: ISSUER, audience: AUDIENCE, requiredClaims: ['exp'] })
+    if (!p || typeof p.exp !== 'number' || p.sub == null || p.sub === '') return null
     return { sub: String(p.sub) }
   } catch {
     return null

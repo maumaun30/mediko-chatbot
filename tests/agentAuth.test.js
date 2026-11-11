@@ -33,3 +33,7 @@ test('bearerFrom extracts token', () => {
   assert.equal(bearerFrom('Basic abc'), null)
   assert.equal(bearerFrom(undefined), null)
 })
+test('verifyAgentToken rejects tokens without exp', () => {
+  const t = jwt.sign({ sub: '1' }, S, { algorithm: 'HS256', issuer: 'mediko-gateway', audience: 'mediko-chat' })
+  assert.equal(verifyAgentToken(t, S), null)
+})

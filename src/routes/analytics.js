@@ -1,13 +1,6 @@
 import { query } from '../db/mysql.js'
-const ADMIN_SECRET = process.env.ADMIN_SECRET
-function requireAuth(req, reply, done) {
-  if (!ADMIN_SECRET) return done()
-  const t = req.headers['x-admin-secret'] ?? req.query.secret
-  if (t !== ADMIN_SECRET) { reply.status(401).send({ error: 'Unauthorized' }); return }
-  done()
-}
 export default async function analyticsRoutes(fastify) {
-  fastify.addHook('onRequest', requireAuth)
+  fastify.addHook('onRequest', fastify.requireAgent)
   fastify.get('/overview', async (req, reply) => {
     const days  = Math.min(parseInt(req.query.days)||30, 90)
     const since = new Date(Date.now() - days*86400000)
