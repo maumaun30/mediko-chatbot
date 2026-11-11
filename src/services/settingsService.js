@@ -2,25 +2,28 @@
  * settingsService.js
  * Reads/writes settings from the chat_settings table.
  */
-import { supabase } from '../db/supabase.js'
+import { query, queryOne } from '../db/mysql.js'
 
 const cache = {}
 const TTL   = 60_000
 
 async function getSetting(key) {
   if (cache[key] && Date.now() - cache[key].ts < TTL) return cache[key].val
-  const { data, error } = await supabase
-    .from('chat_settings').select('value').eq('key', key).single()
-  if (error) return null
-  cache[key] = { val: data.value, ts: Date.now() }
-  return data.value
+  const row = await queryOne('SELECT value FROM chat_settings WHERE `key` = ?', [key])
+  if (!row) return null
+  // mysql2 parses JSON columns into JS objects automatically.
+  const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value
+  cache[key] = { val, ts: Date.now() }
+  return val
 }
 
 async function setSetting(key, value) {
-  const { error } = await supabase
-    .from('chat_settings')
-    .upsert({ key, value, updated_at: new Date().toISOString() })
-  if (error) throw new Error(error.message)
+  await query(
+    `INSERT INTO chat_settings (\`key\`, value, updated_at)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)`,
+    [key, JSON.stringify(value), new Date()]
+  )
   cache[key] = { val: value, ts: Date.now() }
 }
 

@@ -312,7 +312,7 @@ header{background:linear-gradient(135deg,#187adc,#115fa8);padding:0 24px;height:
         <div class="form-field" style="flex:0;min-width:80px"><label class="form-label">Order</label><input class="form-input" id="qr-ord" type="number" value="0" min="0" style="width:80px"></div>
         <button class="btn-primary" onclick="addQr()">Add</button>
       </div>
-      <div class="form-hint"><strong>Label</strong> = button text &nbsp;·&nbsp; <strong>Message</strong> = what actually gets sent to Medi</div>
+      <div class="form-hint"><strong>Label</strong> = button text &nbsp;·&nbsp; <strong>Message</strong> = what actually gets sent to the assistant</div>
     </div>
     <div class="table-card">
       <div class="table-head qr-grid"><span>Label</span><span>Message sent</span><span>Order</span><span>Active</span><span></span></div>
@@ -591,7 +591,7 @@ function renderMessages(msgs){
     const time=new Date(m.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})
     const ds=new Date(m.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'})
     const div=ds!==lastDate?(lastDate=ds,`<div class="date-div">${ds}</div>`):'';
-    const sndr=isAgent?'<div class="msg-sndr agent">👤 Agent</div>':(m.role==='assistant'?'<div class="msg-sndr medi">🌿 Medi</div>':'')
+    const sndr=isAgent?'<div class="msg-sndr agent">👤 Agent</div>':(m.role==='assistant'?'<div class="msg-sndr medi">Mediko Assistant</div>':'')
     return`${div}<div class="msg ${cls}">${sndr}<div class="msg-bbl">${escH(content)}</div><div class="msg-foot">${time}${m.tokens_used?` · ${m.tokens_used} tok`:''}</div></div>`
   }).join('')
   el.scrollTop=el.scrollHeight
@@ -600,7 +600,7 @@ function renderMessages(msgs){
 // ── AGENT COMMANDS ────────────────────────────────────────
 
 function takeOver(){if(!currentSid)return;sendWs({type:'take_over',sessionId:currentSid});toast('Taking over...','info')}
-function retAI(){if(!currentSid)return;sendWs({type:'return_to_ai',sessionId:currentSid});toast('Returning to Medi...','info')}
+function retAI(){if(!currentSid)return;sendWs({type:'return_to_ai',sessionId:currentSid});toast('Returning to Mediko Assistant...','info')}
 
 let typingDebounce=null
 function sendTyping(){

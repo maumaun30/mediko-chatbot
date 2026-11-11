@@ -2,8 +2,29 @@ import { createSession, sessionExists, getSessionMode, loadHistory, saveMessageP
 import { isWithinBusinessHours, getBusinessHours } from '../services/settingsService.js'
 import { processMessage } from '../services/conversationManager.js'
 import { buildMessages }  from '../services/promptService.js'
-import { streamChat }     from '../services/openaiService.js'
+import { streamChat }     from '../services/geminiService.js'
 import { fromWidgetRequest } from '../channels/widgetAdapter.js'
+import { subscribeWidget, unsubscribeWidget } from '../services/agentService.js'
+import { spamCheck, consumeAiQuota, throttleMessage } from '../services/aiRateLimit.js'
+
+// Open an SSE stream with the right CORS header (reply.raw bypasses @fastify/cors).
+function openSSE(request, reply) {
+  const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
+  const requestOrigin = request.headers.origin || ''
+  const corsOrigin = allowedOrigin === '*'
+    ? '*'
+    : (requestOrigin === allowedOrigin ? requestOrigin : '')
+
+  reply.raw.writeHead(200, {
+    'Content-Type':                'text/event-stream',
+    'Cache-Control':               'no-cache, no-transform',
+    'Connection':                  'keep-alive',
+    'X-Accel-Buffering':           'no',
+    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Headers':'Content-Type'
+  })
+  return (data) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+}
 
 const sessionCreateSchema = {
   body: {
@@ -53,7 +74,11 @@ export default async function chatRoutes(fastify) {
 
 
   // POST /api/chat  — widget SSE streaming endpoint
-  fastify.post('/', { schema: chatSchema }, async (request, reply) => {
+  // Per-IP rate limit (tighter than the global default) on the expensive route.
+  fastify.post('/', {
+    schema: chatSchema,
+    config: { rateLimit: { max: 15, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
 
     // ── 1. Normalise to channel-agnostic format ──────────────
     let msg
@@ -61,6 +86,16 @@ export default async function chatRoutes(fastify) {
       msg = fromWidgetRequest(request.body)
     } catch (err) {
       return reply.status(400).send({ error: err.message })
+    }
+
+    // ── 1b. Spam guard — block bursts / duplicate floods before any work ─
+    const spam = spamCheck(msg.sessionId, msg.text)
+    if (spam.blocked) {
+      const send = openSSE(request, reply)
+      send({ type: 'chunk', text: throttleMessage(spam.reason) })
+      send({ type: 'done', tokens: 0 })
+      reply.raw.end()
+      return
     }
 
     // ── 2. Conversation manager — check mode, detect handoff ─
@@ -74,25 +109,8 @@ export default async function chatRoutes(fastify) {
       throw err
     }
 
-    // ── 3. SSE headers ───────────────────────────────────────
-    // Must set CORS header manually here — reply.raw.writeHead() bypasses
-    // @fastify/cors because it writes directly to the Node http response.
-    const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
-    const requestOrigin = request.headers.origin || ''
-    const corsOrigin = allowedOrigin === '*'
-      ? '*'
-      : (requestOrigin === allowedOrigin ? requestOrigin : '')
-
-    reply.raw.writeHead(200, {
-      'Content-Type':                'text/event-stream',
-      'Cache-Control':               'no-cache, no-transform',
-      'Connection':                  'keep-alive',
-      'X-Accel-Buffering':           'no',
-      'Access-Control-Allow-Origin': corsOrigin,
-      'Access-Control-Allow-Headers':'Content-Type'
-    })
-
-    const send = (data) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+    // ── 3. Open SSE stream ───────────────────────────────────
+    const send = openSSE(request, reply)
 
     // ── 4. Handle off-topic, handoff, and agent cases ──────────
     if (decision.type === 'off_topic') {
@@ -126,19 +144,19 @@ export default async function chatRoutes(fastify) {
     }
 
     if (decision.type === 'handoff_returned') {
-      send({ type: 'chunk', text: 'Naibalik na po kayo sa aming AI assistant na si Medi. Paano ko pa kayo matutulungan?' })
+      send({ type: 'chunk', text: 'Naibalik na po kayo sa aming Mediko Assistant. Paano ko pa kayo matutulungan?' })
       send({ type: 'done', tokens: 0 })
       reply.raw.end()
       return
     }
 
-    // ── 5. AI mode — stream OpenAI response ─────────────────
-    if (process.env.AI_ENABLED === 'false') {
-      const fallback = process.env.AI_DISABLED_MESSAGE
-        || "Pasensya na po, ang aming AI assistant ay pansamantalang hindi available. Paki-click po ang 'Talk to agent' button para makausap ang aming team."
-      send({ type: 'chunk', text: fallback })
+    // ── 5. AI mode — stream Gemini response ─────────────────
+    // Global Gemini free-tier quota guard (RPM/RPD across all channels).
+    const quota = consumeAiQuota()
+    if (!quota.ok) {
+      send({ type: 'chunk', text: throttleMessage(quota.reason) })
       send({ type: 'done', tokens: 0 })
-      await saveMessagePair(decision.sessionId, decision.text, fallback, 0)
+      await saveMessagePair(decision.sessionId, decision.text, null)
       reply.raw.end()
       return
     }

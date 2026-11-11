@@ -3,20 +3,29 @@
 Tagalog AI customer support backend for [store.mediko.ph](https://store.mediko.ph).  
 Supports **Shopify widget**, **WhatsApp**, and **Facebook Messenger** from a single codebase.
 
-Built with **Fastify** + **OpenAI** + **Supabase** + **Meta Cloud API**.
+Built with **Fastify** + **Google Gemini** + **MySQL** + **Meta Cloud API**.
 
 ---
 
 ## Quick Start
 
 ```bash
+cp .env.example .env          # fill in your keys
+docker compose up --build     # API on :3001 + MySQL on :3306 (schema auto-loaded)
+```
+
+Or run the API on the host with hot reload (MySQL still in Docker):
+
+```bash
 npm install
-cp .env.example .env        # fill in your keys
-# Run both migrations in Supabase SQL Editor:
-#   src/db/migration.sql          (Phase 1 — tables)
-#   src/db/migration_phase2.sql   (Phase 2 — mode/channel columns)
+cp .env.example .env
+docker compose up -d db       # MySQL only
 npm run dev
 ```
+
+The MySQL schema + seed data live in `src/db/schema.sql` and load automatically
+on the first start of the `db` container. See [DEPLOY.md](DEPLOY.md) for
+CloudPanel/VPS deployment.
 
 ---
 
@@ -29,12 +38,12 @@ Channels (Widget / WhatsApp / Messenger)
         ↓
   Conversation manager   ← checks mode (ai/agent), detects handoff keywords
         ↓
-  AI pipeline  ─────────────────────→  OpenAI (streamed)
+  AI pipeline  ─────────────────────→  Gemini (streamed)
   Agent inbox  ← WebSocket dashboard → admin replies
         ↓
-  Response dispatcher    ← sends reply back to correct channel
+  Response dispatcher    ← widget gets agent replies via SSE (/api/chat/listen)
         ↓
-      Supabase           ← sessions, messages, handoff state
+      MySQL              ← sessions, messages, handoff state
 ```
 
 ---
@@ -47,6 +56,7 @@ Channels (Widget / WhatsApp / Messenger)
 | `POST` | `/api/chat/session` | Create widget session |
 | `POST` | `/api/chat` | Widget SSE stream |
 | `GET`  | `/api/chat/history/:sessionId` | Load message history |
+| `GET`  | `/api/chat/listen/:sessionId` | Widget SSE stream for agent replies (replaces Supabase Realtime) |
 | `GET`  | `/api/webhooks/whatsapp` | Meta webhook verification |
 | `POST` | `/api/webhooks/whatsapp` | WhatsApp inbound messages |
 | `GET`  | `/api/webhooks/messenger` | Meta webhook verification |
@@ -137,19 +147,18 @@ src/
   services/
     conversationManager.js        ← mode check, keyword detection, routing
     responseDispatcher.js         ← sends reply to correct channel
-    agentService.js               ← WebSocket inbox + agent commands
-    sessionService.js             ← Supabase session/message CRUD
+    agentService.js               ← WebSocket inbox + agent commands + widget SSE push
+    sessionService.js             ← MySQL session/message CRUD
     promptService.js              ← Tagalog system prompt builder
-    openaiService.js              ← OpenAI streaming client
+    geminiService.js              ← Google Gemini streaming client
   routes/
-    chat.js                       ← /api/chat (widget SSE)
+    chat.js                       ← /api/chat (widget SSE) + /api/chat/listen
     webhooks.js                   ← /api/webhooks/whatsapp + messenger
   plugins/
     security.js                   ← CORS + rate limiting
   db/
-    supabase.js                   ← Supabase client singleton
-    migration.sql                 ← Phase 1 tables
-    migration_phase2.sql          ← Phase 2 columns
+    mysql.js                      ← MySQL connection pool
+    schema.sql                    ← tables + seed data (auto-loaded by Docker)
 tests/
   chat.test.js
 .env.example

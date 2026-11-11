@@ -133,7 +133,7 @@ export default async function metaSetupRoutes(fastify) {
       const { processMessage }  = await import('../services/conversationManager.js')
       const { loadHistory, saveMessagePair } = await import('../services/sessionService.js')
       const { buildMessages }   = await import('../services/promptService.js')
-      const { streamChat }      = await import('../services/openaiService.js')
+      const { streamChat }      = await import('../services/geminiService.js')
 
       const decision = await processMessage(msg)
 

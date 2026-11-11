@@ -1,12 +1,13 @@
 /**
  * keywordService.js
  *
- * Loads keyword→search_term mappings from Supabase.
+ * Loads keyword→search_term mappings from MySQL.
  * Cached in memory for 5 minutes so each chat message doesn't hit the DB.
  * Cache is invalidated whenever keywords are saved via the dashboard.
  */
 
-import { supabase } from '../db/supabase.js'
+import { randomUUID } from 'crypto'
+import { query, queryOne } from '../db/mysql.js'
 
 /** @type {{ pattern: string, search_term: string, category: string }[]} */
 let cache     = []
@@ -20,21 +21,17 @@ const TTL_MS  = 5 * 60 * 1000   // 5 minutes
 export async function loadKeywords() {
   if (cache.length && Date.now() - cacheTime < TTL_MS) return cache
 
-  const { data, error } = await supabase
-    .from('chat_keywords')
-    .select('pattern, search_term, category')
-    .eq('active', true)
-    .order('category')
-    .order('pattern')
-
-  if (error) {
-    console.error('[keywordService] Failed to load keywords:', error.message)
+  try {
+    cache = await query(
+      `SELECT pattern, search_term, category FROM chat_keywords
+       WHERE active = 1 ORDER BY category, pattern`
+    )
+    cacheTime = Date.now()
+    return cache
+  } catch (err) {
+    console.error('[keywordService] Failed to load keywords:', err.message)
     return cache   // return stale cache rather than crashing
   }
-
-  cache     = data || []
-  cacheTime = Date.now()
-  return cache
 }
 
 /** Force-invalidate the cache (call after any CRUD operation). */
@@ -46,50 +43,35 @@ export function invalidateKeywordCache() {
 // ── CRUD ─────────────────────────────────────────────────────
 
 export async function getAllKeywords() {
-  const { data, error } = await supabase
-    .from('chat_keywords')
-    .select('*')
-    .order('category')
-    .order('pattern')
-  if (error) throw new Error(error.message)
-  return data || []
+  return query(`SELECT * FROM chat_keywords ORDER BY category, pattern`)
 }
 
 export async function createKeyword({ pattern, search_term, category = 'health' }) {
-  const { data, error } = await supabase
-    .from('chat_keywords')
-    .insert({ pattern: pattern.toLowerCase().trim(), search_term: search_term.toLowerCase().trim(), category })
-    .select()
-    .single()
-  if (error) throw new Error(error.message)
+  const id = randomUUID()
+  await query(
+    `INSERT INTO chat_keywords (id, pattern, search_term, category) VALUES (?, ?, ?, ?)`,
+    [id, pattern.toLowerCase().trim(), search_term.toLowerCase().trim(), category]
+  )
   invalidateKeywordCache()
-  return data
+  return queryOne(`SELECT * FROM chat_keywords WHERE id = ?`, [id])
 }
 
 export async function updateKeyword(id, fields) {
-  const updates = {}
-  if (fields.pattern    !== undefined) updates.pattern    = fields.pattern.toLowerCase().trim()
-  if (fields.search_term!== undefined) updates.search_term= fields.search_term.toLowerCase().trim()
-  if (fields.category   !== undefined) updates.category   = fields.category
-  if (fields.active     !== undefined) updates.active      = fields.active
-  updates.updated_at = new Date().toISOString()
+  const sets   = []
+  const params = []
+  if (fields.pattern     !== undefined) { sets.push('pattern = ?');     params.push(fields.pattern.toLowerCase().trim()) }
+  if (fields.search_term !== undefined) { sets.push('search_term = ?'); params.push(fields.search_term.toLowerCase().trim()) }
+  if (fields.category    !== undefined) { sets.push('category = ?');    params.push(fields.category) }
+  if (fields.active      !== undefined) { sets.push('active = ?');      params.push(fields.active ? 1 : 0) }
+  sets.push('updated_at = ?'); params.push(new Date())
+  params.push(id)
 
-  const { data, error } = await supabase
-    .from('chat_keywords')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single()
-  if (error) throw new Error(error.message)
+  await query(`UPDATE chat_keywords SET ${sets.join(', ')} WHERE id = ?`, params)
   invalidateKeywordCache()
-  return data
+  return queryOne(`SELECT * FROM chat_keywords WHERE id = ?`, [id])
 }
 
 export async function deleteKeyword(id) {
-  const { error } = await supabase
-    .from('chat_keywords')
-    .delete()
-    .eq('id', id)
-  if (error) throw new Error(error.message)
+  await query(`DELETE FROM chat_keywords WHERE id = ?`, [id])
   invalidateKeywordCache()
 }

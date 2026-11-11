@@ -141,6 +141,17 @@ export async function processMessage(msg) {
     return { type: 'agent', sessionId, channel, channelUserId, text, mode: 'agent' }
   }
 
+  // ── AI kill-switch — route straight to a human ───────────────
+  // When AI is disabled we don't show a "disabled" message; instead the
+  // customer's message hands off to the agent inbox automatically.
+  if (process.env.AI_ENABLED === 'false') {
+    await setSessionMode(sessionId, 'agent', { handoffAt: new Date().toISOString() })
+    await saveMessagePair(sessionId, text, null)   // keep the message so the agent sees it
+    await dispatchHandoffAck(channel, channelUserId)
+    await notifyAgentInbox({ type: 'handoff_requested', sessionId, channel, channelUserId, text })
+    return { type: 'handoff_requested', sessionId, channel, channelUserId, text, mode: 'agent' }
+  }
+
   // ── Off-topic check — instant rejection, no OpenAI call ────
   if (isOffTopic(text)) {
     return {

@@ -19,7 +19,7 @@
  */
 
 import { WebSocketServer } from 'ws'
-import { supabase } from '../db/supabase.js'
+import { query } from '../db/mysql.js'
 import { setSessionMode, saveAgentMessage } from './sessionService.js'
 import { dispatchReply, dispatchHandoffReturn } from './responseDispatcher.js'
 import { getIdleMinutes } from './settingsService.js'
@@ -80,12 +80,11 @@ export function pushToWidget(sessionId, event) {
 export async function closeIdleSessions() {
   try {
     const idleMins = await getIdleMinutes()
-    const cutoff   = new Date(Date.now() - idleMins * 60_000).toISOString()
-    const { data }  = await supabase
-      .from('chat_sessions')
-      .select('id')
-      .eq('mode', 'agent')
-      .lt('last_active', cutoff)
+    const cutoff   = new Date(Date.now() - idleMins * 60_000)
+    const data = await query(
+      `SELECT id FROM chat_sessions WHERE mode = 'agent' AND last_active < ?`,
+      [cutoff]
+    )
     if (!data?.length) return
     for (const session of data) {
       await setSessionMode(session.id, 'ai', { clearAgent: true })
@@ -184,22 +183,9 @@ async function handleAgentCommand(cmd) {
     }
 
     case 'typing': {
-      // Agent is typing — push indicator to widget via Supabase Realtime
-      // We broadcast a lightweight event without saving to DB
+      // Agent is typing — push a lightweight indicator to the widget SSE stream
+      // (no DB write). The widget shows a typing dot until the next message.
       pushToWidget(sessionId, { type: 'agent_typing', value: !!cmd.value })
-      break
-    }
-
-    case 'typing': {
-      // Agent is typing — push to widget via Supabase Realtime broadcast
-      // We save a temporary marker that the widget picks up
-      pushToWidget(sessionId, { type: 'agent_typing', typing: !!text })
-      break
-    }
-
-    case 'typing': {
-      // Agent started/stopped typing — push to widget in real time
-      pushToWidget(sessionId, { type: 'agent_typing', isTyping: cmd.isTyping === true })
       break
     }
 

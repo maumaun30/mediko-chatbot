@@ -24,7 +24,8 @@ import { processMessage }                   from '../services/conversationManage
 import { dispatchReply, dispatchHandoffAck, dispatchHandoffReturn } from '../services/responseDispatcher.js'
 import { loadHistory, saveMessagePair }     from '../services/sessionService.js'
 import { buildMessages }                    from '../services/promptService.js'
-import { streamChat }                       from '../services/openaiService.js'
+import { streamChat }                       from '../services/geminiService.js'
+import { spamCheck, consumeAiQuota, throttleMessage } from '../services/aiRateLimit.js'
 
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN
 
@@ -127,13 +128,21 @@ export default async function webhookRoutes(fastify) {
  *   1. Conversation manager (mode check, handoff detection, Shopify context)
  *   2. Show typing indicator
  *   3. AI pipeline (stream → collect → dispatch)  OR  agent inbox
- *   4. Save to Supabase
+ *   4. Save to MySQL
  *
  * @param {import('../channels/normalizedMessage.js').NormalizedMessage} msg
  * @param {object} log — fastify logger
  */
 async function handleInboundMessage(msg, log) {
   const { channel, channelUserId, sessionId } = msg
+
+  // ── 0. Spam guard — drop bursts / duplicate floods early ───
+  const spam = spamCheck(channelUserId, msg.text)
+  if (spam.blocked) {
+    log.info({ sessionId, channel, reason: spam.reason }, 'Message blocked as spam')
+    if (spam.reason !== 'burst') await dispatchReply(channel, channelUserId, throttleMessage(spam.reason))
+    return
+  }
 
   // ── 1. Conversation manager ────────────────────────────────
   const decision = await processMessage(msg)
@@ -160,13 +169,12 @@ async function handleInboundMessage(msg, log) {
       break
 
     case 'ai': {
-      // AI kill-switch — when off, return a static fallback instead of calling OpenAI.
-      if (process.env.AI_ENABLED === 'false') {
-        const fallback = process.env.AI_DISABLED_MESSAGE
-          || "Pasensya na po, ang aming AI assistant ay pansamantalang hindi available. Paki-click po ang 'Talk to agent' button para makausap ang aming team."
-        await dispatchReply(channel, channelUserId, fallback)
-        await saveMessagePair(decision.sessionId, decision.text, fallback, 0)
-        log.info({ sessionId, channel }, 'AI disabled — sent fallback')
+      // Global Gemini free-tier quota guard (RPM/RPD across all channels).
+      const quota = consumeAiQuota()
+      if (!quota.ok) {
+        await dispatchReply(channel, channelUserId, throttleMessage(quota.reason))
+        await saveMessagePair(decision.sessionId, decision.text, null)
+        log.warn({ sessionId, channel, reason: quota.reason }, 'AI quota exceeded — throttled')
         break
       }
 

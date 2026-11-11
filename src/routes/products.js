@@ -4,9 +4,28 @@
  * Exposes Shopify product search for testing and debugging.
  */
 
-import { searchProducts, extractSearchTerms } from '../services/shopifyService.js'
+import { searchProducts, extractSearchTerms, getProductByHandle } from '../services/shopifyService.js'
 
 export default async function productRoutes(fastify) {
+
+  /**
+   * GET /api/products/by-handle/:handle
+   * Lightweight lookup the widget uses to render a product card thumbnail + price.
+   */
+  fastify.get('/by-handle/:handle', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['handle'],
+        properties: { handle: { type: 'string', minLength: 1, maxLength: 200 } }
+      }
+    }
+  }, async (request, reply) => {
+    const product = await getProductByHandle(request.params.handle)
+    if (!product) return reply.status(404).send({ error: 'Product not found' })
+    // Cache at the edge/browser too — product data changes rarely
+    return reply.header('Cache-Control', 'public, max-age=600').send(product)
+  })
 
   /**
    * GET /api/products/search?q=genacol
