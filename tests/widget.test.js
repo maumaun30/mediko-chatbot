@@ -51,3 +51,50 @@ test('formatNextOpen formats in Asia/Manila like "Lun 8:00 AM"', async () => {
   assert.equal(formatNextOpen(null), '')
   assert.equal(formatNextOpen('garbage'), '')
 })
+
+test('reconcileSent renames the temp row to the server id', async () => {
+  const { reconcileSent } = await import('../../mediko-widget/src/messages.js')
+  const prev = [{ id: 'g', role: 'agent', content: 'hi', ts: 't0' }, { id: 'tmp', role: 'user', content: 'yo', ts: 't1' }]
+  const out = reconcileSent(prev, 'tmp', { id: 'srv1', created_at: '2026-11-12 01:02:03' })
+  assert.deepEqual(out.map(m => m.id), ['g', 'srv1'])
+  assert.equal(out[1].ts, '2026-11-12T01:02:03Z')
+  assert.equal(out[1].content, 'yo')
+})
+
+test('reconcileSent drops the temp row when a refill already added the server row', async () => {
+  const { reconcileSent } = await import('../../mediko-widget/src/messages.js')
+  const prev = [
+    { id: 'tmp',  role: 'user', content: 'yo', ts: 't1' },
+    { id: 'srv1', role: 'user', content: 'yo', ts: '2026-11-12T01:02:03Z' }
+  ]
+  const out = reconcileSent(prev, 'tmp', { id: 'srv1', created_at: '2026-11-12 01:02:03' })
+  assert.deepEqual(out.map(m => m.id), ['srv1'])
+  assert.equal(new Set(out.map(m => m.id)).size, out.length, 'ids stay unique')
+})
+
+test('reconcileSent without a saved id leaves the list unchanged', async () => {
+  const { reconcileSent } = await import('../../mediko-widget/src/messages.js')
+  const prev = [{ id: 'tmp', role: 'user', content: 'yo', ts: 't1' }]
+  assert.equal(reconcileSent(prev, 'tmp', null), prev)
+  assert.equal(reconcileSent(prev, 'tmp', {}), prev)
+})
+
+test('appendMissing appends only rows whose id is new, mapped to UI messages', async () => {
+  const { appendMissing } = await import('../../mediko-widget/src/messages.js')
+  const prev = [{ id: 'a', role: 'user', content: 'x', ts: 't' }]
+  assert.equal(appendMissing(prev, [{ id: 'a', role: 'user', content: 'x', created_at: 't' }]), prev)
+  const out = appendMissing(prev, [
+    { id: 'a', role: 'user', content: 'x', created_at: 't' },
+    { id: 'b', role: 'assistant', content: '[Agent] hello', created_at: '2026-11-12 01:00:00' }
+  ])
+  assert.deepEqual(out.map(m => [m.id, m.role, m.content]), [['a', 'user', 'x'], ['b', 'agent', 'hello']])
+})
+
+test('shouldClearSession only on 404', async () => {
+  const { shouldClearSession } = await import('../../mediko-widget/src/messages.js')
+  assert.equal(shouldClearSession(404), true)
+  assert.equal(shouldClearSession(500), false)
+  assert.equal(shouldClearSession(503), false)
+  assert.equal(shouldClearSession(null), false, 'network error (no status) keeps the session')
+  assert.equal(shouldClearSession(undefined), false)
+})
