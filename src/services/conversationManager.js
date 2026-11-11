@@ -27,7 +27,7 @@ import {
   saveMessagePair
 } from './sessionService.js'
 import { dispatchHandoffAck, dispatchHandoffReturn } from './responseDispatcher.js'
-import { isWithinBusinessHours, getAwayMessage } from './settingsService.js'
+import { aiEnabled } from './settingsService.js'
 import { notifyAgentInbox } from './agentService.js'
 import {
   getProductContextForMessage,
@@ -107,6 +107,8 @@ export function isReturnToAiRequest(text) {
 // ── Main decision function ───────────────────────────────────
 
 export async function processMessage(msg) {
+  if (!aiEnabled()) throw new Error('processMessage: AI is off')
+
   const { sessionId, channel, channelUserId, text } = msg
 
   const valid = await sessionExists(sessionId)
@@ -139,17 +141,6 @@ export async function processMessage(msg) {
     await notifyAgentInbox({ type: 'customer_message', sessionId, channel, channelUserId, text })
     await saveMessagePair(sessionId, text, null)
     return { type: 'agent', sessionId, channel, channelUserId, text, mode: 'agent' }
-  }
-
-  // ── AI kill-switch — route straight to a human ───────────────
-  // When AI is disabled we don't show a "disabled" message; instead the
-  // customer's message hands off to the agent inbox automatically.
-  if (process.env.AI_ENABLED === 'false') {
-    await setSessionMode(sessionId, 'agent', { handoffAt: new Date().toISOString() })
-    await saveMessagePair(sessionId, text, null)   // keep the message so the agent sees it
-    await dispatchHandoffAck(channel, channelUserId)
-    await notifyAgentInbox({ type: 'handoff_requested', sessionId, channel, channelUserId, text })
-    return { type: 'handoff_requested', sessionId, channel, channelUserId, text, mode: 'agent' }
   }
 
   // ── Off-topic check — instant rejection, no OpenAI call ────

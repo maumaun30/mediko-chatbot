@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "nodemon src/app.js",
     "start": "node src/app.js",
-    "test": "node --test tests/chat.test.js"
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

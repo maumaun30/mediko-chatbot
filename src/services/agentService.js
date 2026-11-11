@@ -22,7 +22,6 @@ import { WebSocketServer } from 'ws'
 import { query } from '../db/mysql.js'
 import { setSessionMode, saveAgentMessage } from './sessionService.js'
 import { dispatchReply, dispatchHandoffReturn } from './responseDispatcher.js'
-import { getIdleMinutes } from './settingsService.js'
 
 /** @type {Set<import('ws').WebSocket>} */
 const agentConnections = new Set()
@@ -75,27 +74,6 @@ export function pushToWidget(sessionId, event) {
  *
  * @param {import('http').Server} httpServer
  */
-// ── Idle session auto-close ──────────────────────────────────
-
-export async function closeIdleSessions() {
-  try {
-    const idleMins = await getIdleMinutes()
-    const cutoff   = new Date(Date.now() - idleMins * 60_000)
-    const data = await query(
-      `SELECT id FROM chat_sessions WHERE mode = 'agent' AND last_active < ?`,
-      [cutoff]
-    )
-    if (!data?.length) return
-    for (const session of data) {
-      await setSessionMode(session.id, 'ai', { clearAgent: true })
-      pushToWidget(session.id, { type: 'mode_changed', mode: 'ai' })
-      await notifyAgentInbox({ type: 'mode_changed', sessionId: session.id, mode: 'ai', initiatedBy: 'idle_timeout' })
-    }
-  } catch (e) {
-    console.error('[agentService] closeIdleSessions:', e.message)
-  }
-}
-
 export function setupAgentWebSocket(httpServer) {
   const wss = new WebSocketServer({ noServer: true })
 

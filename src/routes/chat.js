@@ -1,5 +1,8 @@
-import { createSession, sessionExists, getSessionMode, loadHistory, saveMessagePair, getFullHistory } from '../services/sessionService.js'
-import { isWithinBusinessHours, getBusinessHours } from '../services/settingsService.js'
+import { createSession, sessionExists, getSessionMode, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage } from '../services/sessionService.js'
+import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
+import { normalizePhMobile } from '../services/phone.js'
+import { verifyChatLink } from '../services/agentAuth.js'
+import { hooks } from '../services/chatEvents.js'
 import { processMessage } from '../services/conversationManager.js'
 import { buildMessages }  from '../services/promptService.js'
 import { streamChat }     from '../services/geminiService.js'
@@ -29,12 +32,34 @@ function openSSE(request, reply) {
 const sessionCreateSchema = {
   body: {
     type: 'object',
+    required: ['customerName', 'customerEmail', 'customerPhone'],
     properties: {
+      customerName:  { type: 'string', minLength: 1, maxLength: 100 },
       customerEmail: { type: 'string', format: 'email' },
+      customerPhone: { type: 'string', minLength: 1, maxLength: 40 },
       metadata:      { type: 'object' }
     }
   },
   response: { 201: { type: 'object', properties: { sessionId: { type: 'string' } } } }
+}
+
+const messageSchema = {
+  body: {
+    type: 'object',
+    required: ['message', 'sessionId'],
+    properties: {
+      message:   { type: 'string', minLength: 1, maxLength: 2000 },
+      sessionId: { type: 'string', format: 'uuid' }
+    }
+  }
+}
+
+const typingSchema = {
+  body: {
+    type: 'object',
+    required: ['sessionId'],
+    properties: { sessionId: { type: 'string', format: 'uuid' } }
+  }
 }
 
 const chatSchema = {
@@ -55,21 +80,78 @@ const historySchema = {
 
 export default async function chatRoutes(fastify) {
 
-  // GET /api/chat/config — public widget config (AI kill-switch, etc.)
+  // GET /api/chat/config - public widget config
   fastify.get('/config', async (_request, reply) => {
-    const aiEnabled = process.env.AI_ENABLED !== 'false'
+    const bh     = await getBusinessHours()
+    const online = await isWithinBusinessHours()
+    const next   = online ? null : nextOpenAt(bh, new Date())
     return reply.send({
-      aiEnabled,
-      aiDisabledMessage: aiEnabled ? null : (process.env.AI_DISABLED_MESSAGE || null)
+      aiEnabled:   aiEnabled(),
+      online,
+      nextOpenAt:  next ? next.toISOString() : null,
+      awayMessage: await getAwayMessage()
     })
   })
 
 
   // POST /api/chat/session
   fastify.post('/session', { schema: sessionCreateSchema }, async (request, reply) => {
-    const { customerEmail, metadata } = request.body || {}
-    const sessionId = await createSession({ channel: 'widget', customerEmail, metadata })
+    const { customerName, customerEmail, customerPhone, metadata } = request.body
+    const phone = normalizePhMobile(customerPhone)
+    if (!phone) {
+      return reply.status(400).send({ error: 'Pakilagay po ang tamang mobile number (09XXXXXXXXX).' })
+    }
+    const sessionId = await createSession({
+      channel: 'widget', customerName: customerName.trim(), customerEmail, customerPhone: phone, metadata
+    })
     return reply.status(201).send({ sessionId })
+  })
+
+
+  // POST /api/chat/message - customer message to the human team
+  fastify.post('/message', {
+    schema: messageSchema,
+    config: { rateLimit: { max: 15, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const { sessionId, message } = request.body
+
+    const spam = spamCheck(sessionId, message)
+    if (spam.blocked) {
+      return reply.status(429).send({ error: throttleMessage(spam.reason) })
+    }
+
+    if (!(await sessionExists(sessionId))) {
+      return reply.status(404).send({ error: 'Session not found. Please refresh the page.' })
+    }
+
+    const { message: saved, isFirst } = await recordCustomerMessage(sessionId, message)
+    try {
+      await hooks.onCustomerMessage({ sessionId, message: saved, isFirst })
+    } catch (err) {
+      fastify.log.error({ err: err.message, sessionId }, 'onCustomerMessage hook failed')
+    }
+
+    const online = await isWithinBusinessHours()
+    return reply.send({ message: saved, away: online ? null : await getAwayMessage() })
+  })
+
+
+  // POST /api/chat/typing
+  fastify.post('/typing', { schema: typingSchema }, async (request, reply) => {
+    try {
+      await hooks.onCustomerTyping(request.body.sessionId)
+    } catch (err) {
+      fastify.log.error({ err: err.message }, 'onCustomerTyping hook failed')
+    }
+    return reply.status(204).send()
+  })
+
+
+  // GET /api/chat/resume?t=<signed link token>
+  fastify.get('/resume', async (request, reply) => {
+    const sessionId = verifyChatLink(String(request.query?.t || ''))
+    if (!sessionId) return reply.status(410).send({ error: 'expired' })
+    return reply.send({ sessionId })
   })
 
 
@@ -79,6 +161,8 @@ export default async function chatRoutes(fastify) {
     schema: chatSchema,
     config: { rateLimit: { max: 15, timeWindow: '1 minute' } }
   }, async (request, reply) => {
+
+    if (!aiEnabled()) return reply.status(409).send({ error: 'AI is off' })
 
     // ── 1. Normalise to channel-agnostic format ──────────────
     let msg
@@ -124,7 +208,7 @@ export default async function chatRoutes(fastify) {
       const isOpen = await isWithinBusinessHours()
       if (!isOpen) {
         const bh = await getBusinessHours()
-        const awayMsg = bh?.away_message || 'Pasensya na po, wala pa kaming available na agent ngayon. Maaari kayong mag-iwan ng mensahe at babalik kami sa inyo sa susunod na araw ng negosyo.'
+        const awayMsg = bh?.awayMessage || 'Pasensya na po, wala pa kaming available na agent ngayon. Maaari kayong mag-iwan ng mensahe at babalik kami sa inyo sa susunod na araw ng negosyo.'
         send({ type: 'chunk', text: awayMsg })
         send({ type: 'done', tokens: 0 })
       } else {

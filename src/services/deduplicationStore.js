@@ -36,4 +36,4 @@ setInterval(() => {
   for (const [id, ts] of seen.entries()) {
     if (ts < cutoff) seen.delete(id)
   }
-}, CLEANUP_EVERY)
+}, CLEANUP_EVERY).unref?.()

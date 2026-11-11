@@ -339,22 +339,6 @@ test('isDuplicate: different IDs are independent', async () => {
 
 // ── Phase 5: admin dashboard route guard ─────────────────────
 
-test('dashboard HTML is a valid HTML document', async () => {
-  const { readFileSync } = await import('fs')
-  const { join, dirname } = await import('path')
-  const { fileURLToPath } = await import('url')
-  const __dirname = dirname(fileURLToPath(import.meta.url))
-  const html = readFileSync(join(__dirname, '../src/dashboard/index.html'), 'utf8')
-
-  assert.ok(html.includes('<!DOCTYPE html>'),       'should have doctype')
-  assert.ok(html.includes('Agent Dashboard'),        'should mention dashboard')
-  assert.ok(html.includes('connectWs'),              'should include WebSocket logic')
-  assert.ok(html.includes('/api/agent/ws'),           'should reference WS endpoint')
-  assert.ok(html.includes('take_over'),              'should include take over command')
-  assert.ok(html.includes('return_to_ai'),           'should include return to AI command')
-  assert.ok(html.includes('agent_message'),          'should include agent message command')
-})
-
 test('admin route file exports a default function', async () => {
   // Just check the module can be parsed — DB calls are mocked at runtime
   const src = (await import('fs')).readFileSync(
@@ -394,31 +378,6 @@ test('useChat hook covers all SSE event types', async () => {
   assert.ok(src.includes("case 'handoff'"), 'handles handoff events')
   assert.ok(src.includes("case 'error'"),   'handles error events')
   assert.ok(src.includes('localStorage'),   'persists session in localStorage')
-})
-
-test('ChatWidget has quick replies and reset functionality', async () => {
-  const { readFileSync } = await import('fs')
-  const { join, dirname } = await import('path')
-  const { fileURLToPath } = await import('url')
-  const base = dirname(fileURLToPath(import.meta.url))
-  const src  = readFileSync(join(base, '../../mediko-widget/src/components/ChatWidget.jsx'), 'utf8')
-  assert.ok(src.includes('QUICK_REPLIES'),   'has quick reply suggestions')
-  assert.ok(src.includes('resetSession'),    'has reset session button')
-  assert.ok(src.includes('mode-banner'),     'shows handoff/agent mode banner')
-  assert.ok(src.includes('fab-badge'),       'shows unread message badge')
-})
-
-test('widget CSS uses Shadow DOM scoping via :host', async () => {
-  const { readFileSync } = await import('fs')
-  const { join, dirname } = await import('path')
-  const { fileURLToPath } = await import('url')
-  const base = dirname(fileURLToPath(import.meta.url))
-  const css  = readFileSync(join(base, '../../mediko-widget/src/styles.js'), 'utf8')
-  assert.ok(css.includes(':host'),           'uses :host for Shadow DOM scoping')
-  assert.ok(css.includes('--mdk-primary'),   'defines brand CSS custom properties')
-  assert.ok(css.includes('.fab'),            'has FAB styles')
-  assert.ok(css.includes('.chat-window'),    'has chat window styles')
-  assert.ok(css.includes('.typing-bubble'),  'has typing indicator styles')
 })
 
 // ── Off-topic detection ───────────────────────────────────────

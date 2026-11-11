@@ -3,6 +3,9 @@
  * Reads/writes settings from the chat_settings table.
  */
 import { query, queryOne } from '../db/mysql.js'
+import { isOpenAt, nextOpenAt } from './hours.js'
+
+export { isOpenAt, nextOpenAt }
 
 const cache = {}
 const TTL   = 60_000
@@ -33,20 +36,15 @@ export async function getIdleMinutes()      { const s = await getSetting('idle_m
 export async function saveIdleMinutes(mins) { return await setSetting('idle_minutes', { value: mins }) }
 
 export async function isWithinBusinessHours() {
-  const bh = await getBusinessHours()
-  if (!bh?.enabled) return true
-  const tz    = bh.timezone || 'Asia/Manila'
-  const now   = new Date()
-  const local = new Date(now.toLocaleString('en-US', { timeZone: tz }))
-  const days  = ['sun','mon','tue','wed','thu','fri','sat']
-  const day   = days[local.getDay()]
-  const h     = bh.hours?.[day]
-  if (!h?.open) return false
-  const [sh, sm] = h.start.split(':').map(Number)
-  const [eh, em] = h.end.split(':').map(Number)
-  const cur = local.getHours() * 60 + local.getMinutes()
-  return cur >= sh * 60 + sm && cur < eh * 60 + em
+  return isOpenAt(await getBusinessHours(), new Date())
 }
+
+/** Minutes a customer message may sit unanswered before an alert. Default 10 (row may be absent). */
+export async function getUnansweredMinutes() {
+  const s = await getSetting('unanswered_minutes')
+  return s?.value ?? 10
+}
+export async function saveUnansweredMinutes(n) { return await setSetting('unanswered_minutes', { value: n }) }
 
 export async function getAwayMessage() {
   const bh = await getBusinessHours()
