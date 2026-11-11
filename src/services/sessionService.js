@@ -100,8 +100,12 @@ export async function sessionExists(sessionId) {
   return !!row
 }
 
+// Latest message content per session, for the inbox preview.
+const LAST_MESSAGE_SQL =
+  `(SELECT m.content FROM chat_messages m WHERE m.session_id = chat_sessions.id ORDER BY m.seq DESC LIMIT 1) AS last_message`
+
 export async function getSession(sessionId) {
-  return queryOne('SELECT * FROM chat_sessions WHERE id = ?', [sessionId])
+  return queryOne(`SELECT chat_sessions.*, ${LAST_MESSAGE_SQL} FROM chat_sessions WHERE id = ?`, [sessionId])
 }
 
 /**
@@ -253,7 +257,7 @@ export async function listConversations({ status = 'open', q, limit = 50, before
   if (before) { where.push('last_active < ?'); params.push(before instanceof Date ? before : new Date(before)) }
   const lim = Math.max(1, Math.min(parseInt(limit, 10) || 50, 200))
   return query(
-    `SELECT * FROM chat_sessions WHERE ${where.join(' AND ')} ORDER BY last_active DESC LIMIT ${lim}`,
+    `SELECT chat_sessions.*, ${LAST_MESSAGE_SQL} FROM chat_sessions WHERE ${where.join(' AND ')} ORDER BY last_active DESC LIMIT ${lim}`,
     params
   )
 }

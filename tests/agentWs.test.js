@@ -139,3 +139,25 @@ test('hooks broadcast customer_message and customer_typing', async () => {
   assert.deepEqual(sent.find(e => e.type === 'customer_typing').sessionId, 's1')
   broadcast({ type: 'x' }) // no sockets left, must not throw
 })
+
+test('customerMessageEvent pins the customer_message contract', async () => {
+  const { customerMessageEvent } = await import('../src/services/agentService.js')
+  const ev = customerMessageEvent({ id: 's1', status: 'open', customer_name: 'Ana' }, { id: 3, role: 'user', content: 'hi', created_at: 'x' })
+  assert.deepEqual(Object.keys(ev).sort(), ['conversation', 'message', 'sessionId', 'type'])
+  assert.equal(ev.type, 'customer_message'); assert.equal(ev.sessionId, 's1')
+  assert.equal(ev.message.content, 'hi')
+  assert.equal(ev.conversation.id, 's1'); assert.equal(ev.conversation.lastMessage, 'hi')
+})
+
+test('conversationManager no longer emits legacy-shaped events', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../src/services/conversationManager.js', import.meta.url), 'utf8')
+  assert.ok(!/broadcast\(/.test(src))
+})
+
+test('toConversation maps last_message and strips legacy [Agent] prefix', async () => {
+  const { toConversation } = await import('../src/services/conversationView.js')
+  assert.equal(toConversation({ id: 's', status: 'open', last_message: 'hello' }).lastMessage, 'hello')
+  assert.equal(toConversation({ id: 's', status: 'open', last_message: '[Agent] hello' }).lastMessage, 'hello')
+  assert.equal(toConversation({ id: 's', status: 'open' }).lastMessage, null)
+})

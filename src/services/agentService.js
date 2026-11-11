@@ -110,8 +110,13 @@ export async function notifySessionUpdated(sessionId, sessions = realSessions) {
 
 // ── Live-event hooks (Task 6 layers alerts / offline queue on top) ──
 
+/** The one customer_message shape agents ever receive. */
+export function customerMessageEvent(session, message) {
+  return { type: 'customer_message', sessionId: session.id, message, conversation: conversationFor(session, message.content) }
+}
+
 hooks.onCustomerMessage = async (session, message, _isFirst) => {
-  broadcast({ type: 'customer_message', sessionId: session.id, message, conversation: conversationFor(session, message.content) })
+  broadcast(customerMessageEvent(session, message))
 }
 hooks.onCustomerTyping = async (sessionId) => {
   broadcast({ type: 'customer_typing', sessionId })
