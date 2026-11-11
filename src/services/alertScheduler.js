@@ -6,6 +6,7 @@
 import * as sessions from './sessionService.js'
 import { getUnansweredMinutes as realMinutes } from './settingsService.js'
 import { postChatEvent as realPost } from './gatewayNotifier.js'
+import { maskId } from './redact.js'
 
 const MIN_MS = 60_000
 
@@ -39,7 +40,7 @@ export async function runAlertTick(d = {}) {
       })
       if (ok) await markAlerted(row.id, now)
     } catch (err) {
-      log(`[alerts] ${row.id} failed: ${err?.message}`)
+      log(`[alerts] ${maskId(row.id)} failed: ${err?.message}`)
     }
   }
 }

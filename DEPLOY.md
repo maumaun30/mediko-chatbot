@@ -83,6 +83,7 @@ Required environment (must match the gateway's `.env` where noted):
 | `GATEWAY_ORIGIN` | Exact gateway origin the agent WebSocket accepts (unset = all agent sockets rejected) |
 | `CHAT_CUSTOMER_URL` | Storefront page with the widget; used in emailed `?mdk_chat=` links |
 | `AI_ENABLED` | `false` |
+| `TRUST_PROXY` | Proxy hops trusted for the client IP (rate limits key on it). Default `loopback`. **With docker compose set `loopback,172.16.0.0/12`**: nginx reaches the container from the docker bridge gateway, not 127.0.0.1, and without this every customer shares one rate-limit bucket |
 
 Staff alerts and offline-reply emails are sent by the gateway; if the secret or
 `GATEWAY_URL` is missing the chat service logs and skips them (chat still works).
@@ -114,6 +115,7 @@ proxy_http_version 1.1;
 proxy_set_header Upgrade $http_upgrade;
 proxy_set_header Connection "upgrade";
 proxy_set_header Host $host;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;   # real client IP (see TRUST_PROXY)
 proxy_read_timeout 3600s;     # keep long-lived SSE/WS alive
 proxy_buffering off;          # required for SSE streaming
 ```

@@ -6,6 +6,7 @@
 import * as sessions from './sessionService.js'
 import { signChatLink as realSign } from './agentAuth.js'
 import { postChatEvent as realPost } from './gatewayNotifier.js'
+import { maskId } from './redact.js'
 
 export function createOfflineReplyQueue({
   delayMs = 120_000, isOnline, send, setTimer = setTimeout, clearTimer = clearTimeout, log = console.error
@@ -19,7 +20,7 @@ export function createOfflineReplyQueue({
         try {
           if (!isOnline(sessionId)) await send(sessionId)
         } catch (err) {
-          log(`[offlineQueue] ${sessionId} failed: ${err?.message}`)
+          log(`[offlineQueue] ${maskId(sessionId)} failed: ${err?.message}`)
         }
       }, delayMs)
       timer?.unref?.()

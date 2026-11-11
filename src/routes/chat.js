@@ -1,4 +1,4 @@
-import { createSession, sessionExists, getSessionMode, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession } from '../services/sessionService.js'
+import { createSession, sessionExists, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession } from '../services/sessionService.js'
 import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
 import { normalizePhMobile } from '../services/phone.js'
 import { verifyChatLink } from '../services/agentAuth.js'
@@ -10,6 +10,7 @@ import { streamChat }     from '../services/geminiService.js'
 import { fromWidgetRequest } from '../channels/widgetAdapter.js'
 import { subscribeWidget, unsubscribeWidget, notifySessionUpdated } from '../services/agentService.js'
 import { spamCheck, consumeAiQuota, throttleMessage } from '../services/aiRateLimit.js'
+import { maskId } from '../services/redact.js'
 
 // Open an SSE stream with the right CORS header (reply.raw bypasses @fastify/cors).
 function openSSE(request, reply) {
@@ -129,7 +130,7 @@ export default async function chatRoutes(fastify) {
       const session = await getSession(sessionId)
       await hooks.onCustomerMessage(session, saved, isFirst)
     } catch (err) {
-      fastify.log.error({ err: err.message, sessionId }, 'onCustomerMessage hook failed')
+      fastify.log.error({ err: err.message, sessionId: maskId(sessionId) }, 'onCustomerMessage hook failed')
     }
 
     const online = await isWithinBusinessHours()
@@ -137,8 +138,11 @@ export default async function chatRoutes(fastify) {
   })
 
 
-  // POST /api/chat/typing
-  fastify.post('/typing', { schema: typingSchema }, async (request, reply) => {
+  // POST /api/chat/typing - own bucket so typing never drains the global limit
+  fastify.post('/typing', {
+    schema: typingSchema,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
     try {
       await hooks.onCustomerTyping(request.body.sessionId)
     } catch (err) {
@@ -268,7 +272,7 @@ export default async function chatRoutes(fastify) {
       reply.raw.end()
 
     } catch (err) {
-      fastify.log.error({ err: err.message, stack: err.stack, sessionId: decision.sessionId }, 'Chat stream error')
+      fastify.log.error({ err: err.message, stack: err.stack, sessionId: maskId(decision.sessionId) }, 'Chat stream error')
       send({ type: 'error', message: 'May nangyaring mali. Subukan ulit po.' })
       reply.raw.end()
     }
@@ -289,27 +293,14 @@ export default async function chatRoutes(fastify) {
 
 
   /**
-   * GET /api/chat/mode/:sessionId
-   * Returns the current mode of a session — used by the widget on reload
-   * to decide whether to open the agent listen stream.
-   */
-  fastify.get('/mode/:sessionId', async (request, reply) => {
-    const { sessionId } = request.params
-    const valid = await sessionExists(sessionId)
-    if (!valid) return reply.status(404).send({ error: 'Session not found' })
-    const mode = await getSessionMode(sessionId)
-    return reply.send({ sessionId, mode })
-  })
-
-
-  /**
    * GET /api/chat/listen/:sessionId
    *
-   * Long-lived SSE stream the widget subscribes to when in agent/handoff mode.
-   * The server pushes:
-   *   { type: 'agent_message', text }   — agent reply
-   *   { type: 'mode_changed',  mode }   — mode switched (e.g. back to AI)
-   *   { type: 'ping' }                  — keepalive every 25s
+   * Long-lived SSE stream the widget keeps open while it has a session (it
+   * also marks the customer online). The server pushes:
+   *   { type: 'connected' }                          — stream is live
+   *   { type: 'agent_message', message }             — agent reply row
+   *   { type: 'agent_typing',  value }               — agent typing on/off
+   *   { type: 'ping' }                               — keepalive every 20s
    */
   fastify.get('/listen/:sessionId', async (request, reply) => {
     const { sessionId } = request.params

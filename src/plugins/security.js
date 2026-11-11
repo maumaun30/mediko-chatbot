@@ -38,7 +38,9 @@ export default fp(async function plugins(fastify) {
     timeWindow: '1 minute',
     // Authenticated agents are exempt from the customer-facing limit.
     allowList: (req) => !!verifyAgentToken(bearerFrom(req.headers.authorization)),
+    // The plugin throws this object, so it needs statusCode (else Fastify answers 500).
     errorResponseBuilder: () => ({
+      statusCode: 429,
       error: 'Masyadong maraming mensahe. Pakihintay ng ilang segundo bago subukang muli.'
     })
   })

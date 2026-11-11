@@ -14,19 +14,13 @@ import { createOfflineReplyQueue, createOfflineSender, installNotificationHooks 
 import { startUnansweredAlerts } from './services/alertScheduler.js'
 import staticPlugin             from './plugins/static.js'
 import { migrate }              from './db/migrate.js'
+import { serverOptions }        from './serverOptions.js'
 
 const PORT    = parseInt(process.env.PORT || '3001', 10)
 const HOST    = process.env.HOST          || '0.0.0.0'
 const IS_PROD = process.env.NODE_ENV === 'production'
 
-const fastify = Fastify({
-  logger: {
-    level: process.env.LOG_LEVEL || 'info',
-    ...(!IS_PROD && {
-      transport: { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } }
-    })
-  }
-})
+const fastify = Fastify(serverOptions({ isProd: IS_PROD }))
 
 await fastify.register(securityPlugins)
 await fastify.register(requireAgentPlugin)
