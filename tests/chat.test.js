@@ -357,17 +357,21 @@ test('widget main.jsx mounts into shadow DOM', async () => {
   assert.ok(src.includes('pointer-events: none'),'should set pointer-events none on host')
 })
 
-test('useChat hook covers all SSE event types', async () => {
+test('useChat hook uses the human-only live chat API', async () => {
   const { readFileSync } = await import('fs')
   const { join, dirname } = await import('path')
   const { fileURLToPath } = await import('url')
   const base = dirname(fileURLToPath(import.meta.url))
   const src  = readFileSync(join(base, '../../mediko-widget/src/hooks/useChat.js'), 'utf8')
-  assert.ok(src.includes("case 'chunk'"),   'handles chunk events')
-  assert.ok(src.includes("case 'done'"),    'handles done events')
-  assert.ok(src.includes("case 'handoff'"), 'handles handoff events')
-  assert.ok(src.includes("case 'error'"),   'handles error events')
-  assert.ok(src.includes('localStorage'),   'persists session in localStorage')
+  assert.ok(src.includes('/api/chat/message'),     'sends customer messages to /api/chat/message')
+  assert.ok(src.includes('/listen/'),              'listens for agent pushes on the SSE stream')
+  assert.ok(src.includes('mdk_chat'),              'handles the resume link param')
+  assert.ok(src.includes('localStorage'),          'persists session in localStorage')
+  assert.ok(src.includes("case 'agent_message'"),  'handles agent_message pushes')
+  assert.ok(src.includes("case 'agent_typing'"),   'handles agent_typing pushes')
+  assert.ok(!src.includes('mode_changed'),         'no mode_changed handling')
+  assert.ok(!src.includes('quick-replies'),        'no quick replies')
+  assert.ok(src.includes('aiRef.current === true'),'AI streaming only behind config.aiEnabled === true')
 })
 
 // ── Off-topic detection ───────────────────────────────────────
