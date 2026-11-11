@@ -1,4 +1,4 @@
-import { createSession, sessionExists, getSessionMode, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage } from '../services/sessionService.js'
+import { createSession, sessionExists, getSessionMode, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession } from '../services/sessionService.js'
 import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
 import { normalizePhMobile } from '../services/phone.js'
 import { verifyChatLink } from '../services/agentAuth.js'
@@ -8,7 +8,7 @@ import { processMessage } from '../services/conversationManager.js'
 import { buildMessages }  from '../services/promptService.js'
 import { streamChat }     from '../services/geminiService.js'
 import { fromWidgetRequest } from '../channels/widgetAdapter.js'
-import { subscribeWidget, unsubscribeWidget } from '../services/agentService.js'
+import { subscribeWidget, unsubscribeWidget, notifySessionUpdated } from '../services/agentService.js'
 import { spamCheck, consumeAiQuota, throttleMessage } from '../services/aiRateLimit.js'
 
 // Open an SSE stream with the right CORS header (reply.raw bypasses @fastify/cors).
@@ -126,7 +126,8 @@ export default async function chatRoutes(fastify) {
 
     const { message: saved, isFirst } = await recordCustomerMessage(sessionId, message)
     try {
-      await hooks.onCustomerMessage({ sessionId, message: saved, isFirst })
+      const session = await getSession(sessionId)
+      await hooks.onCustomerMessage(session, saved, isFirst)
     } catch (err) {
       fastify.log.error({ err: err.message, sessionId }, 'onCustomerMessage hook failed')
     }
@@ -332,7 +333,8 @@ export default async function chatRoutes(fastify) {
     // Send an immediate connected event so the widget knows the stream is live
     raw.write('data: {"type":"connected"}\n\n')
 
-    subscribeWidget(sessionId, raw)
+    const announce = () => notifySessionUpdated(sessionId).catch(() => {})
+    if (subscribeWidget(sessionId, raw)) announce()
 
     // Keepalive ping every 20s
     const ping = setInterval(() => {
@@ -345,7 +347,7 @@ export default async function chatRoutes(fastify) {
 
     function cleanup() {
       clearInterval(ping)
-      unsubscribeWidget(sessionId, raw)
+      if (unsubscribeWidget(sessionId, raw)) announce()
       try { raw.end() } catch {}
     }
 

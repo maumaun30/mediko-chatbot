@@ -5,26 +5,12 @@
  */
 import * as realSessions from '../services/sessionService.js'
 import * as realSettings from '../services/settingsService.js'
-import * as agentService from '../services/agentService.js'
+import { isOnline as presenceIsOnline } from '../services/agentService.js'
+import { toConversation } from '../services/conversationView.js'
 
-const { isUnanswered, stripAgentPrefix } = realSessions
+const { stripAgentPrefix } = realSessions
 
-// Until the presence tracker lands in agentService (Task 5), nobody is "online".
-const defaultIsOnline = (id) => (typeof agentService.isOnline === 'function' ? !!agentService.isOnline(id) : false)
-
-export function toConversation(row, online) {
-  return {
-    id: row.id,
-    displayName: row.customer_name || 'Unknown visitor',
-    email: row.customer_email ?? null,
-    phone: row.customer_phone ?? null,
-    status: row.status,
-    unanswered: isUnanswered(row),
-    online: !!online,
-    lastMessage: row.last_message ?? null,
-    lastActive: row.last_active ?? null
-  }
-}
+export { toConversation }
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 const HHMM = '^([01]\\d|2[0-3]):[0-5]\\d$'
@@ -53,7 +39,7 @@ const settingsSchema = {
 export default async function agentRoutes(fastify, opts = {}) {
   const sessions = opts.sessions || realSessions
   const settings = opts.settings || realSettings
-  const isOnline = opts.isOnline || defaultIsOnline
+  const isOnline = opts.isOnline || presenceIsOnline
 
   fastify.addHook('onRequest', fastify.requireAgent)
 

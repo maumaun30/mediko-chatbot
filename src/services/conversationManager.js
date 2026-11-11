@@ -28,7 +28,7 @@ import {
 } from './sessionService.js'
 import { dispatchHandoffAck, dispatchHandoffReturn } from './responseDispatcher.js'
 import { aiEnabled } from './settingsService.js'
-import { notifyAgentInbox } from './agentService.js'
+import { broadcast } from './agentService.js'
 import {
   getProductContextForMessage,
   lookupOrder,
@@ -124,7 +124,7 @@ export async function processMessage(msg) {
   if (currentMode === 'agent' && isReturnToAiRequest(text)) {
     await setSessionMode(sessionId, 'ai', { clearAgent: true })
     await dispatchHandoffReturn(channel, channelUserId)
-    await notifyAgentInbox({ type: 'mode_changed', sessionId, mode: 'ai' })
+    await broadcast({ type: 'mode_changed', sessionId, mode: 'ai' })
     return { type: 'handoff_returned', sessionId, channel, channelUserId, text, mode: 'ai' }
   }
 
@@ -132,13 +132,13 @@ export async function processMessage(msg) {
   if (currentMode === 'ai' && isHandoffRequest(text)) {
     await setSessionMode(sessionId, 'agent', { handoffAt: new Date().toISOString() })
     await dispatchHandoffAck(channel, channelUserId)
-    await notifyAgentInbox({ type: 'handoff_requested', sessionId, channel, channelUserId, text })
+    await broadcast({ type: 'handoff_requested', sessionId, channel, channelUserId, text })
     return { type: 'handoff_requested', sessionId, channel, channelUserId, text, mode: 'agent' }
   }
 
   // Agent mode — forward to inbox
   if (currentMode === 'agent') {
-    await notifyAgentInbox({ type: 'customer_message', sessionId, channel, channelUserId, text })
+    await broadcast({ type: 'customer_message', sessionId, channel, channelUserId, text })
     await saveMessagePair(sessionId, text, null)
     return { type: 'agent', sessionId, channel, channelUserId, text, mode: 'agent' }
   }
