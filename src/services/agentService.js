@@ -5,13 +5,18 @@
  * presence, and the live-event hooks.
  *
  * Server -> agent events:
- *   connected, customer_message, agent_sent, session_updated, customer_typing
- *   (plus handoff_requested / mode_changed from the legacy AI path)
+ *   connected, customer_message, agent_sent, session_updated, customer_typing,
+ *   pong (answer to an app-level ping)
  *
- * Agent -> server commands (validated; bad input gets { type: 'error' }):
- *   { type: 'agent_message', sessionId, text }  text 1-2000 chars
+ * Agent -> server commands (validated; bad input gets { type: 'error', clientId? }):
+ *   { type: 'agent_message', sessionId, text, clientId? }  text 1-2000 chars;
+ *       clientId (<= 64 chars) is echoed on agent_sent so the portal can confirm the send
  *   { type: 'typing', sessionId, value }
  *   { type: 'close' | 'reopen', sessionId }
+ *   { type: 'ping' }  -> { type: 'pong' } (browsers cannot see protocol pings)
+ *
+ * The server also sends a protocol ping every 25 s and terminates sockets
+ * that did not answer the previous one.
  */
 
 import { WebSocketServer } from 'ws'
@@ -23,6 +28,8 @@ import { verifyAgentToken } from './agentAuth.js'
 
 const AGENT_PATH = '/api/agent/ws'
 const MAX_TEXT = 2000
+const MAX_CLIENT_ID = 64
+export const HEARTBEAT_MS = 25_000
 
 // ── Presence ─────────────────────────────────────────────────
 
@@ -140,40 +147,68 @@ export function authorizeUpgrade(req, { secret, gatewayOrigin = process.env.GATE
 // ── WebSocket server ─────────────────────────────────────────
 
 /**
+ * One heartbeat pass: terminate sockets that missed the last pong, ping the rest.
+ * @param {Iterable<{ isAlive?: boolean, ping: Function, terminate: Function }>} clients
+ */
+export function heartbeatTick(clients) {
+  for (const ws of clients) {
+    if (ws.isAlive === false) { try { ws.terminate() } catch {} continue }
+    ws.isAlive = false
+    try { ws.ping() } catch {}
+  }
+}
+
+/** The clientId to echo back, or undefined when absent / not a short string. */
+function clientIdOf(cmd) {
+  const id = cmd && typeof cmd === 'object' ? cmd.clientId : undefined
+  return typeof id === 'string' && id && id.length <= MAX_CLIENT_ID ? id : undefined
+}
+
+/**
  * Attach the agent WebSocket server to the raw HTTP server (call once).
  * @param {import('http').Server} httpServer
+ * @returns {{ wss: WebSocketServer, close: () => void }}
  */
-export function setupAgentWebSocket(httpServer) {
+export function setupAgentWebSocket(httpServer, { heartbeatMs = HEARTBEAT_MS } = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 })
 
-  httpServer.on('upgrade', (request, socket, head) => {
+  const onUpgrade = (request, socket, head) => {
     socket.on('error', () => {})
     const pathname = (request.url || '').split('?')[0]
     if (pathname !== AGENT_PATH) return socket.destroy()
 
     const agent = authorizeUpgrade(request)
     if (!agent) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
       return socket.destroy()
     }
     wss.handleUpgrade(request, socket, head, (ws) => {
       ws.agentId = agent.sub
       wss.emit('connection', ws, request)
     })
-  })
+  }
+  httpServer.on('upgrade', onUpgrade)
+
+  const heartbeat = setInterval(() => heartbeatTick(wss.clients), heartbeatMs)
+  heartbeat.unref?.()
 
   wss.on('connection', (ws) => {
     const unregister = registerAgentSocket(ws)
     const reply = (obj) => { try { ws.send(JSON.stringify(obj)) } catch {} }
+    ws.isAlive = true
+    ws.on('pong', () => { ws.isAlive = true })
 
     ws.on('message', async (data) => {
+      ws.isAlive = true
+      let cmd
       try {
-        let cmd
         try { cmd = JSON.parse(data.toString()) } catch { throw badInput('Invalid JSON') }
+        if (cmd && cmd.type === 'ping') return reply({ type: 'pong' })
         await handleAgentCommand(cmd)
       } catch (err) {
         if (!err?.expose) console.error('[agentWs] command failed:', err?.message)
-        reply({ type: 'error', message: err?.expose ? err.message : 'Internal error' })
+        const clientId = clientIdOf(cmd)
+        reply({ type: 'error', message: err?.expose ? err.message : 'Internal error', ...(clientId && { clientId }) })
       }
     })
 
@@ -182,6 +217,16 @@ export function setupAgentWebSocket(httpServer) {
 
     reply({ type: 'connected', message: 'Agent inbox ready' })
   })
+
+  return {
+    wss,
+    close() {
+      clearInterval(heartbeat)
+      httpServer.off('upgrade', onUpgrade)
+      for (const ws of wss.clients) { try { ws.terminate() } catch {} }
+      wss.close()
+    }
+  }
 }
 
 // ── Commands from agents ─────────────────────────────────────
@@ -224,7 +269,8 @@ export async function handleAgentCommand(cmd, d = {}) {
       await dispatchReply(session.channel, session.channel_user_id, text) // no-op for widget
       const message = await saveAgentMessage(sessionId, text)
       try { await onAgentMessage(session, message) } catch (err) { console.error('[agentWs] onAgentMessage failed:', err?.message) }
-      emit({ type: 'agent_sent', sessionId, message })
+      const clientId = clientIdOf(cmd)
+      emit({ type: 'agent_sent', sessionId, message, ...(clientId && { clientId }) })
       push(sessionId, { type: 'agent_message', message: { ...message, role: 'agent' } })
       await updated()
       break
