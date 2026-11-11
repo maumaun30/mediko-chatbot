@@ -1,9 +1,16 @@
 # Mediko Chat API — Docker & CloudPanel deployment
 
-The API now runs on **MySQL** (no more Supabase) and ships with a Docker Compose
-stack: the Fastify API + a MySQL 8 database. Realtime agent replies are pushed
-to the widget over the API's own SSE stream (`/api/chat/listen/:sessionId`), so
-there is no external realtime service to configure.
+The API runs on **MySQL** and ships with a Docker Compose stack: the Fastify
+API + a MySQL 8 database. It is a human-only live-agent chat (`AI_ENABLED=false`).
+Agent replies reach the widget over the API's own SSE stream
+(`/api/chat/listen/:sessionId`); staff use the inbox embedded in the Mediko
+gateway and connect to `WS /api/agent/ws`. The old standalone `/dashboard` and
+`ADMIN_SECRET` are gone.
+
+**Run exactly one instance** (`instances: 1`, fork mode — see
+`ecosystem.config.cjs`). Presence, agent sockets, the offline-reply queue and
+the alert scheduler are in-memory; cluster mode or a second replica would split
+connections and send duplicate alerts.
 
 ---
 
@@ -15,7 +22,7 @@ Two ways to run it:
 
 ```bash
 cd mediko-chatbot
-cp .env.example .env          # fill in OPENAI_API_KEY, SHOPIFY_*, ADMIN_SECRET
+cp .env.example .env          # fill in DB_*, CHAT_AGENT_SECRET, GATEWAY_*, ALLOWED_ORIGINS
 docker compose up --build
 ```
 
@@ -63,10 +70,22 @@ docker compose version
 git clone <your-repo> /opt/mediko-chatbot
 cd /opt/mediko-chatbot
 cp .env.example .env
-# Edit .env — set strong DB_PASSWORD / DB_ROOT_PASSWORD, OPENAI_API_KEY,
-# SHOPIFY_*, ADMIN_SECRET, and:
-#   WIDGET_ALLOWED_ORIGIN=https://store.mediko.ph
+# Edit .env — set strong DB_PASSWORD / DB_ROOT_PASSWORD and the chat vars below.
 ```
+
+Required environment (must match the gateway's `.env` where noted):
+
+| Variable | Value |
+|----------|-------|
+| `CHAT_AGENT_SECRET` | 32+ random chars, **identical in the gateway `.env`**. Signs agent JWTs, customer link tokens and chat events |
+| `ALLOWED_ORIGINS` | `https://store.mediko.ph,<gateway origin>` (CORS allow-list) |
+| `GATEWAY_URL` | Gateway base URL for `POST /internal/chat-events` |
+| `GATEWAY_ORIGIN` | Exact gateway origin the agent WebSocket accepts (unset = all agent sockets rejected) |
+| `CHAT_CUSTOMER_URL` | Storefront page with the widget; used in emailed `?mdk_chat=` links |
+| `AI_ENABLED` | `false` |
+
+Staff alerts and offline-reply emails are sent by the gateway; if the secret or
+`GATEWAY_URL` is missing the chat service logs and skips them (chat still works).
 
 The compose file already binds the API to `127.0.0.1:3001` only, and reads
 secrets from `.env`. Bring it up:
@@ -87,7 +106,7 @@ In the CloudPanel UI:
 4. Issue a Let's Encrypt certificate for the domain (SSL tab).
 
 CloudPanel's Nginx config for the proxy must forward upgrade headers so the
-**agent WebSocket** (`/api/agent/ws`) and **SSE** streams work. Add to the
+**agent WebSocket** (`/api/agent/ws`, which also checks the `Origin` header) and **SSE** streams work. Add to the
 vhost (Vhost tab) inside the proxy `location` block if not present:
 
 ```nginx

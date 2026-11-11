@@ -1,16 +1,19 @@
-# Mediko Chat API — Phase 2 (Channel-Agnostic Architecture)
+# Mediko Chat API
 
-Tagalog AI customer support backend for [store.mediko.ph](https://store.mediko.ph).  
-Supports **Shopify widget**, **WhatsApp**, and **Facebook Messenger** from a single codebase.
+Live-agent chat backend for [store.mediko.ph](https://store.mediko.ph).
+Customers talk to the Mediko team (shown as **"Mediko Support"**); staff
+answer from an inbox embedded in the Mediko gateway (Shopify admin).
+There is **no AI in the default flow**: `AI_ENABLED=false`. The legacy Gemini
+path is kept behind `AI_ENABLED=true` only.
 
-Built with **Fastify** + **Google Gemini** + **MySQL** + **Meta Cloud API**.
+Built with **Fastify 4** (ESM) + **MySQL** + **ws**.
 
 ---
 
 ## Quick Start
 
 ```bash
-cp .env.example .env          # fill in your keys
+cp .env.example .env          # set DB_*, CHAT_AGENT_SECRET, GATEWAY_*, ALLOWED_ORIGINS
 docker compose up --build     # API on :3001 + MySQL on :3306 (schema auto-loaded)
 ```
 
@@ -18,118 +21,167 @@ Or run the API on the host with hot reload (MySQL still in Docker):
 
 ```bash
 npm install
-cp .env.example .env
-docker compose up -d db       # MySQL only
+docker compose up -d db
 npm run dev
 ```
 
-The MySQL schema + seed data live in `src/db/schema.sql` and load automatically
-on the first start of the `db` container. See [DEPLOY.md](DEPLOY.md) for
-CloudPanel/VPS deployment.
+Migrations (`src/db/migrate.js`) run on every start. See [DEPLOY.md](DEPLOY.md)
+for CloudPanel/VPS deployment.
 
 ---
 
 ## Architecture
 
 ```
-Channels (Widget / WhatsApp / Messenger)
-        ↓
-  Channel adapters       ← normalise to NormalizedMessage
-        ↓
-  Conversation manager   ← checks mode (ai/agent), detects handoff keywords
-        ↓
-  AI pipeline  ─────────────────────→  Gemini (streamed)
-  Agent inbox  ← WebSocket dashboard → admin replies
-        ↓
-  Response dispatcher    ← widget gets agent replies via SSE (/api/chat/listen)
-        ↓
-      MySQL              ← sessions, messages, handoff state
+ Customer widget (store.mediko.ph)            Staff inbox (gateway, Shopify admin)
+   |  REST + SSE  (/api/chat/*)                 |  REST (/api/agent/*) + WS (/api/agent/ws)
+   v                                            v   gateway-issued agent JWT
+ +--------------------------- Fastify chat service -----------------------------+
+ |  chat routes -> sessionService (MySQL) -> hooks (chatEvents.js)               |
+ |  agentService: widget presence, agent sockets, broadcast                      |
+ |  notifications: new_conversation / unanswered / offline_reply                 |
+ +---------------------------------------|--------------------------------------+
+                                          | signed POST /internal/chat-events
+                                          v
+                                   Gateway (staff alerts, customer emails)
 ```
+
+- The customer posts a message; it is stored and broadcast to every connected
+  agent socket. Agent replies are pushed to the widget over SSE.
+- Presence = at least one open `/api/chat/listen/:sessionId` stream.
+- Business hours (default Mon-Fri 08:00-17:00, `Asia/Manila`) only change the
+  away message; customers can always write.
+- **Alerts** (to the gateway, around the clock):
+  - `new_conversation` on a session's first message (also sets `alerted_at`).
+  - `unanswered` when the customer has written again since the last alert and
+    nobody replied for N minutes (default 10, configurable). Checked every
+    60 s by `alertScheduler.js`; at most one alert per unanswered stretch.
+  - `offline_reply` when an agent replies and the customer is not connected
+    for 120 s (debounced, presence re-checked when the timer fires). The
+    gateway emails the replies with a 14-day link (`?mdk_chat=<token>`).
+- All hook failures (DB, network) are caught and logged; they never fail a
+  customer request.
+
+> **Single instance only.** Presence, agent sockets, the offline queue and the
+> alert scheduler live in process memory. Run exactly one process
+> (`instances: 1`, fork mode in pm2). Cluster mode would split connections and
+> duplicate alerts.
 
 ---
 
 ## Endpoints
 
+### Public (widget)
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET`  | `/health` | Health check |
-| `POST` | `/api/chat/session` | Create widget session |
-| `POST` | `/api/chat` | Widget SSE stream |
-| `GET`  | `/api/chat/history/:sessionId` | Load message history |
-| `GET`  | `/api/chat/listen/:sessionId` | Widget SSE stream for agent replies (replaces Supabase Realtime) |
-| `GET`  | `/api/webhooks/whatsapp` | Meta webhook verification |
-| `POST` | `/api/webhooks/whatsapp` | WhatsApp inbound messages |
-| `GET`  | `/api/webhooks/messenger` | Meta webhook verification |
-| `POST` | `/api/webhooks/messenger` | Messenger inbound messages |
-| `WS`   | `/api/agent/ws` | Admin agent inbox (WebSocket) |
+| `GET`  | `/api/chat/config` | `{ aiEnabled, online, nextOpenAt, awayMessage }` |
+| `POST` | `/api/chat/session` | Create a session. Body: `customerName`, `customerEmail`, `customerPhone` (PH mobile `09XXXXXXXXX` / `+639XXXXXXXXX`, stored as `639XXXXXXXXX`), optional `metadata`. Returns `201 { sessionId }` |
+| `POST` | `/api/chat/message` | Customer message (1-2000 chars, 15/min). Returns `{ message, away }` |
+| `POST` | `/api/chat/typing` | Customer typing signal, `204` |
+| `GET`  | `/api/chat/resume?t=<token>` | Exchange a signed email link token for `{ sessionId }`; `410 { error: 'expired' }` if invalid/expired |
+| `GET`  | `/api/chat/history/:sessionId` | Message history (`?limit=1..100`) |
+| `GET`  | `/api/chat/listen/:sessionId` | Widget SSE stream (also marks the customer online). Events: `connected`, `agent_message`, `agent_typing`, `ping` |
+| `GET`  | `/api/chat/mode/:sessionId` | Legacy session mode |
+| `POST` | `/api/chat` | Legacy AI SSE stream; `409` unless `AI_ENABLED=true` |
+| `*`    | `/api/webhooks/whatsapp`, `/api/webhooks/messenger` | Meta channels (not live) |
 
----
+### Agent (all require `Authorization: Bearer <agent JWT>`)
 
-## Handoff System
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/api/agent/conversations` | List. Query: `status` (`open`/`unanswered`/`closed`), `q`, `limit` (1-200), `before` |
+| `GET`  | `/api/agent/conversations/:id` | `{ conversation, messages }`; 404 if unknown |
+| `GET`  | `/api/agent/settings` | `{ businessHours, unansweredMinutes }` |
+| `PUT`  | `/api/agent/settings` | Update `unansweredMinutes` (1-240) and/or `businessHours` |
+| `WS`   | `/api/agent/ws?token=<agent JWT>` | Real-time inbox (below) |
 
-### Guest-initiated (keyword trigger)
-Customer types any of: `agent`, `tao`, `ahente`, `human`, `tulong`, `help`, `support`
+`/api/keywords/*` and `/api/analytics/*` also require the agent JWT.
 
-Medi replies: *"Sandali lang po. Ikinokonekta ko kayo sa aming team..."*  
-Session `mode` flips to `'agent'`. Admin dashboard receives a `handoff_requested` WebSocket event.
-
-### Admin-initiated (proactive takeover)
-Admin sends `{ type: 'take_over', sessionId }` via WebSocket.  
-All subsequent customer messages bypass AI and go to the agent inbox.
-
-### Return to AI
-- Guest types: `ai na`, `medi na`, `return to ai`, `back to ai`
-- Admin sends: `{ type: 'return_to_ai', sessionId }` via WebSocket
+The agent JWT is HS256, `iss: mediko-gateway`, `aud: mediko-chat`, 300 s TTL,
+`sub` = staff user id, signed with `CHAT_AGENT_SECRET`. The gateway mints it.
 
 ---
 
 ## Agent WebSocket Protocol
 
-Connect to: `ws://your-domain.com/api/agent/ws`
+Connect to `wss://<chat-host>/api/agent/ws?token=<jwt>`. The upgrade is
+rejected with `401` unless the `Origin` header equals `GATEWAY_ORIGIN`
+(fail closed when unset) and the token is valid. Frames are JSON, max 16 KB.
 
-### Events received by admin dashboard
+### Server -> agent
 
-```json
-{ "type": "handoff_requested", "sessionId": "...", "channel": "whatsapp", "text": "agent" }
-{ "type": "customer_message",  "sessionId": "...", "channel": "messenger", "text": "hello" }
-{ "type": "mode_changed",      "sessionId": "...", "mode": "ai" }
-{ "type": "agent_sent",        "sessionId": "...", "text": "Hello po!" }
-```
-
-### Commands sent by admin dashboard
+Every event also carries `ts` (ISO time).
 
 ```json
-{ "type": "take_over",     "sessionId": "..." }
-{ "type": "return_to_ai",  "sessionId": "..." }
-{ "type": "agent_message", "sessionId": "...", "text": "Hello po, paano kita matutulungan?" }
+{ "type": "connected", "message": "Agent inbox ready" }
+{ "type": "customer_message", "sessionId": "...", "message": { "...": "..." }, "conversation": { "...": "..." } }
+{ "type": "agent_sent",       "sessionId": "...", "message": { "...": "..." } }
+{ "type": "session_updated",  "sessionId": "...", "conversation": { "...": "..." } }
+{ "type": "customer_typing",  "sessionId": "..." }
+{ "type": "error", "message": "..." }
 ```
+
+`conversation` is `{ id, displayName, email, phone, status, unanswered, online, lastMessage, lastActive }`.
+
+### Agent -> server
+
+```json
+{ "type": "agent_message", "sessionId": "...", "text": "Hello po!" }
+{ "type": "typing",        "sessionId": "...", "value": true }
+{ "type": "close",         "sessionId": "..." }
+{ "type": "reopen",        "sessionId": "..." }
+```
+
+`text` must be 1-2000 characters. Bad input returns `{ "type": "error" }`.
 
 ---
 
-## Meta Webhook Setup (Phase 4)
+## Gateway events (chat service -> gateway)
 
-1. Create a Meta App at [developers.facebook.com](https://developers.facebook.com)
-2. Add **WhatsApp** and **Messenger** products
-3. Set `META_WEBHOOK_VERIFY_TOKEN` in `.env` to any secret string
-4. Register webhook URLs:
-   - `https://your-domain.com/api/webhooks/whatsapp`
-   - `https://your-domain.com/api/webhooks/messenger`
-5. Subscribe to the **messages** webhook field on both products
-6. For WhatsApp: copy **Phone Number ID** → `WHATSAPP_PHONE_NUMBER_ID`
-7. For Messenger: copy **Page Access Token** → `MESSENGER_PAGE_ACCESS_TOKEN`
-8. Get a **System User Access Token** with `whatsapp_business_messaging` permission → `META_ACCESS_TOKEN`
+`POST ${GATEWAY_URL}/internal/chat-events`, JSON body `{ type, ...payload }`,
+10 s timeout, never throws (logs and returns false).
 
-> Meta Cloud API free tier: **1,000 conversations/month** (resets monthly).  
-> A conversation = 24-hour window from first message. No per-message charge within the window.
+| Header | Value |
+|--------|-------|
+| `X-Mediko-Timestamp` | unix ms |
+| `X-Mediko-Signature` | hex HMAC-SHA256 of `` `${timestamp}.${rawBody}` `` with `CHAT_AGENT_SECRET` |
+
+| `type` | Payload |
+|--------|---------|
+| `new_conversation`, `unanswered` | `{ sessionId, name, email, phone, text }` |
+| `offline_reply` | `{ sessionId, name, email, messages: string[], link }` with `link = ${CHAT_CUSTOMER_URL}?mdk_chat=<token>` |
+
+If `CHAT_AGENT_SECRET` is missing or shorter than 32 chars, events are skipped
+and logged.
 
 ---
 
-## Running Tests
+## Environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `CHAT_AGENT_SECRET` | 32+ chars. Shared with the gateway; signs agent JWTs, customer link tokens and chat events. Never stored in the DB |
+| `ALLOWED_ORIGINS` | Comma list of browser origins for CORS (store + gateway). Falls back to `WIDGET_ALLOWED_ORIGIN` |
+| `GATEWAY_URL` | Base URL events are posted to |
+| `GATEWAY_ORIGIN` | Exact `Origin` the agent WebSocket accepts |
+| `CHAT_CUSTOMER_URL` | Storefront page hosting the widget; used in emailed links |
+| `AI_ENABLED` | `false` (default). `true` re-enables the legacy Gemini path |
+| `DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME` | MySQL |
+| `PORT` `HOST` `NODE_ENV` `LOG_LEVEL` | Server |
+| `GEMINI_*`, `SHOPIFY_*`, `META_*`, `WHATSAPP_*` | Only for the legacy AI / channel features |
+
+The standalone `/dashboard` and the `ADMIN_SECRET` variable were **removed**.
+Staff use the gateway-embedded inbox; every agent route authenticates with the
+gateway-issued JWT.
+
+---
+
+## Tests
 
 ```bash
-npm test
-# 14/22 pass without npm install (sandbox only)
-# 22/22 pass after npm install in your project
+npm test      # node --test tests/*.test.js
 ```
 
 ---
@@ -138,39 +190,21 @@ npm test
 
 ```
 src/
-  app.js                          ← Fastify entry, WebSocket setup
-  channels/
-    normalizedMessage.js          ← shared internal message format
-    widgetAdapter.js              ← Shopify widget → NormalizedMessage
-    whatsappAdapter.js            ← Meta WhatsApp → NormalizedMessage + send
-    messengerAdapter.js           ← Meta Messenger → NormalizedMessage + send
+  app.js                       Fastify entry, hooks + scheduler wiring
   services/
-    conversationManager.js        ← mode check, keyword detection, routing
-    responseDispatcher.js         ← sends reply to correct channel
-    agentService.js               ← WebSocket inbox + agent commands + widget SSE push
-    sessionService.js             ← MySQL session/message CRUD
-    promptService.js              ← Tagalog system prompt builder
-    geminiService.js              ← Google Gemini streaming client
+    agentAuth.js               agent JWT, chat link tokens, event signing
+    agentService.js            widget presence, agent WS, broadcast, hooks
+    chatEvents.js              hook points between routes and live features
+    gatewayNotifier.js         signed POST /internal/chat-events
+    alertScheduler.js          unanswered alerts (60 s tick, unref'd)
+    offlineReplyQueue.js       debounced offline-reply emails + hook wiring
+    sessionService.js          MySQL sessions / messages
+    settingsService.js         business hours, unanswered minutes
+    hours.js, phone.js         office-hours and PH mobile helpers
   routes/
-    chat.js                       ← /api/chat (widget SSE) + /api/chat/listen
-    webhooks.js                   ← /api/webhooks/whatsapp + messenger
-  plugins/
-    security.js                   ← CORS + rate limiting
-  db/
-    mysql.js                      ← MySQL connection pool
-    schema.sql                    ← tables + seed data (auto-loaded by Docker)
+    chat.js                    /api/chat/*
+    agent.js                   /api/agent/*
+  plugins/                     security (CORS, rate limit), requireAgent, static
+  db/                          mysql pool, migrate.js, schema.sql
 tests/
-  chat.test.js
-.env.example
 ```
-
----
-
-## What's Next
-
-| Phase | Description |
-|-------|-------------|
-| **Phase 3** | Shopify product context — live product search injected into prompts |
-| **Phase 4** | Meta webhook registration + end-to-end WhatsApp/Messenger testing |
-| **Phase 5** | Admin dashboard UI — real-time inbox, session list, handoff controls |
-| **Phase 6** | React chat widget + Shopify theme.liquid injection |

@@ -16,7 +16,7 @@ export function stripAgentPrefix(content) {
 }
 
 // DB timestamps come back as 'YYYY-MM-DD HH:MM:SS(.sss)' UTC strings (dateStrings + timezone Z).
-function parseDbTime(v) {
+export function parseDbTime(v) {
   if (v == null) return null
   if (v instanceof Date) return v.getTime()
   const t = Date.parse(String(v).replace(' ', 'T') + 'Z')
@@ -277,7 +277,7 @@ export async function agentMessagesToEmail(sessionId) {
     `SELECT m.content FROM chat_messages m
      JOIN chat_sessions s ON s.id = m.session_id
      WHERE m.session_id = ? AND m.role = 'agent'
-       AND m.created_at > GREATEST(s.last_customer_at, COALESCE(s.customer_emailed_at, '1970-01-01 00:00:00'))
+       AND m.created_at > GREATEST(COALESCE(s.last_customer_at, '1970-01-01 00:00:00'), COALESCE(s.customer_emailed_at, '1970-01-01 00:00:00'))
      ORDER BY m.seq ASC`,
     [sessionId]
   )

@@ -8,7 +8,10 @@ import requireAgentPlugin       from './plugins/requireAgent.js'
 import agentRoutes              from './routes/agent.js'
 import keywordRoutes            from './routes/keywords.js'
 import analyticsRoutes          from './routes/analytics.js'
-import { setupAgentWebSocket } from './services/agentService.js'
+import { setupAgentWebSocket, isOnline } from './services/agentService.js'
+import { hooks }                from './services/chatEvents.js'
+import { createOfflineReplyQueue, createOfflineSender, installNotificationHooks } from './services/offlineReplyQueue.js'
+import { startUnansweredAlerts } from './services/alertScheduler.js'
 import staticPlugin             from './plugins/static.js'
 import { migrate }              from './db/migrate.js'
 
@@ -45,9 +48,12 @@ if (!IS_PROD) {
 
 try {
   await migrate()
+  const offlineQueue = createOfflineReplyQueue({ isOnline, send: createOfflineSender(), log: (m) => fastify.log.error(m) })
+  installNotificationHooks(hooks, { isOnline, queue: offlineQueue, log: (m) => fastify.log.error(m) })
   await fastify.listen({ port: PORT, host: HOST })
   setupAgentWebSocket(fastify.server)
-    fastify.log.info(`Mediko Chat API v6  →  http://${HOST}:${PORT}`)
+  startUnansweredAlerts({ log: (m) => fastify.log.error(m) })
+  fastify.log.info(`Mediko Chat API v6  →  http://${HOST}:${PORT}`)
 } catch (err) {
   fastify.log.error(err)
   process.exit(1)
