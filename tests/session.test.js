@@ -24,3 +24,22 @@ test('aiEnabled only for exact "true"', () => {
   process.env.AI_ENABLED = 'true'; assert.equal(aiEnabled(), true)
   delete process.env.AI_ENABLED;  assert.equal(aiEnabled(), false)
 })
+test('getFullHistory returns the latest N messages in chronological order', async () => {
+  const { getFullHistory } = await import('../src/services/sessionService.js')
+  const calls = []
+  const rows = [{ id: 'a', role: 'user', content: 'hi', created_at: 'x' }]
+  const run = async (sql, params) => { calls.push({ sql, params }); return rows }
+  const out = await getFullHistory('s1', 20, { run })
+  assert.equal(out, rows)
+  assert.equal(calls.length, 1)
+  const sql = calls[0].sql.replace(/\s+/g, ' ')
+  assert.deepEqual(calls[0].params, ['s1'])
+  // Inner query picks the newest N, outer query restores chronological order.
+  assert.match(sql, /\(\s*SELECT .*FROM chat_messages WHERE session_id = \? ORDER BY seq DESC LIMIT 20\s*\)/)
+  assert.match(sql, /\)\s*\w*\s*(AS\s+\w+\s+)?ORDER BY \w*\.?seq ASC\s*$/i)
+  // Limit clamps to 1..100
+  await getFullHistory('s1', 999, { run })
+  assert.match(calls[1].sql, /LIMIT 100\b/)
+  await getFullHistory('s1', undefined, { run })
+  assert.match(calls[2].sql, /LIMIT 50\b/)
+})

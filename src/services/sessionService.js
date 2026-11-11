@@ -288,12 +288,16 @@ export async function markEmailed(id, at) {
   await query('UPDATE chat_sessions SET customer_emailed_at = ? WHERE id = ?', [at, id])
 }
 
-export async function getFullHistory(sessionId, limit = 50) {
+/** Latest `limit` messages (1..100, default 50) of a session, oldest first. */
+export async function getFullHistory(sessionId, limit = 50, { run = query } = {}) {
   const lim = Math.max(1, Math.min(parseInt(limit, 10) || 50, 100))
-  return query(
-    `SELECT id, role, content, created_at FROM chat_messages
-     WHERE session_id = ?
-     ORDER BY seq ASC LIMIT ${lim}`,
+  return run(
+    `SELECT id, role, content, created_at FROM (
+       SELECT id, role, content, created_at, seq FROM chat_messages
+       WHERE session_id = ?
+       ORDER BY seq DESC LIMIT ${lim}
+     ) AS latest
+     ORDER BY latest.seq ASC`,
     [sessionId]
   )
 }
