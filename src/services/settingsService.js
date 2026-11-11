@@ -52,3 +52,8 @@ export async function getAwayMessage() {
   const bh = await getBusinessHours()
   return bh?.awayMessage || 'Pasensya na po, wala kaming available na agent sa ngayon. Subukan ulit mamaya.'
 }
+
+/** AI replies are on only when AI_ENABLED is exactly the string 'true'. */
+export function aiEnabled() {
+  return process.env.AI_ENABLED === 'true'
+}

@@ -12,6 +12,7 @@ import settingsRoutes           from './routes/settings.js'
 import dashboardRoutes          from './routes/dashboard.js'
 import { setupAgentWebSocket, closeIdleSessions } from './services/agentService.js'
 import staticPlugin             from './plugins/static.js'
+import { migrate }              from './db/migrate.js'
 
 const PORT    = parseInt(process.env.PORT || '3001', 10)
 const HOST    = process.env.HOST          || '0.0.0.0'
@@ -47,6 +48,7 @@ if (!IS_PROD) {
 }
 
 try {
+  await migrate()
   await fastify.listen({ port: PORT, host: HOST })
   setupAgentWebSocket(fastify.server)
     fastify.log.info(`Mediko Chat API v6  →  http://${HOST}:${PORT}`)

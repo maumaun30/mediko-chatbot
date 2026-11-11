@@ -18,7 +18,15 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
   channel_user_id VARCHAR(255)  NULL,
   assigned_agent  VARCHAR(255)  NULL,
   handoff_at      DATETIME(3)   NULL,
+  customer_name       VARCHAR(255) NULL,
+  customer_phone      VARCHAR(20)  NULL,
+  status              VARCHAR(10)  NOT NULL DEFAULT 'open',
+  last_customer_at    DATETIME(3)  NULL,
+  last_agent_at       DATETIME(3)  NULL,
+  alerted_at          DATETIME(3)  NULL,
+  customer_emailed_at DATETIME(3)  NULL,
   INDEX idx_sessions_mode         (mode, last_active),
+  INDEX idx_sessions_status       (status, last_customer_at),
   INDEX idx_sessions_channel_user (channel, channel_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -121,16 +129,9 @@ INSERT IGNORE INTO chat_keywords (id, pattern, search_term, category) VALUES
   (UUID(),'multivitamin','multivitamin','product'),
   (UUID(),'bitamina','multivitamin','health');
 
--- Quick replies
-INSERT IGNORE INTO chat_quick_replies (id, label, message, sort_order) VALUES
-  (UUID(),'Ano ang mga produkto ninyo?','Ano ang mga produkto ninyo?',1),
-  (UUID(),'Para sa kasukasuan at joints','May supplement ba para sa kasukasuan?',2),
-  (UUID(),'Para sa immune system','May pang-immunity ba kayong supplement?',3),
-  (UUID(),'Saan na ang aking order?','Saan na ang aking order?',4),
-  (UUID(),'Makausap ng agent','agent',5);
-
 -- Settings
 INSERT INTO chat_settings (`key`, value) VALUES
-  ('business_hours', '{"enabled":false,"timezone":"Asia/Manila","awayMessage":"Pasensya na po, wala kaming available na agent sa ngayon. Maaari kayong mag-iwan ng mensahe at tutugon kami sa lalong madaling panahon.","hours":{"mon":{"open":true,"start":"08:00","end":"18:00"},"tue":{"open":true,"start":"08:00","end":"18:00"},"wed":{"open":true,"start":"08:00","end":"18:00"},"thu":{"open":true,"start":"08:00","end":"18:00"},"fri":{"open":true,"start":"08:00","end":"18:00"},"sat":{"open":false,"start":"09:00","end":"13:00"},"sun":{"open":false,"start":"09:00","end":"13:00"}}}'),
-  ('idle_minutes', '{"value":30}')
+  ('business_hours', '{"enabled":true,"timezone":"Asia/Manila","awayMessage":"Pasensya na po, wala kaming available na agent sa ngayon. Maaari kayong mag-iwan ng mensahe at tutugon kami sa lalong madaling panahon.","hours":{"mon":{"open":true,"start":"08:00","end":"17:00"},"tue":{"open":true,"start":"08:00","end":"17:00"},"wed":{"open":true,"start":"08:00","end":"17:00"},"thu":{"open":true,"start":"08:00","end":"17:00"},"fri":{"open":true,"start":"08:00","end":"17:00"},"sat":{"open":false,"start":"09:00","end":"13:00"},"sun":{"open":false,"start":"09:00","end":"13:00"}}}'),
+  ('idle_minutes', '{"value":30}'),
+  ('unanswered_minutes', '{"value":10}')
 ON DUPLICATE KEY UPDATE `key` = `key`;
