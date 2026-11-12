@@ -71,6 +71,12 @@ export default async function agentRoutes(fastify, opts = {}) {
     }
   }
 
+  // Counts for the Gateway Home dashboard.
+  fastify.get('/stats', async () => {
+    const [counts, bh] = await Promise.all([sessions.countConversations(), settings.getBusinessHours()])
+    return { open: counts.open, unanswered: counts.unanswered, officeHoursEnabled: bh?.enabled === true }
+  })
+
   fastify.get('/settings', async () => currentSettings())
 
   fastify.put('/settings', { schema: settingsSchema }, async (request) => {

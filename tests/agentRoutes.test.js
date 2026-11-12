@@ -17,7 +17,8 @@ const saved = { hours: null, mins: null }
 const sessions = {
   listConversations: async () => [{ id: 's1', customer_name: null, customer_email: null, customer_phone: null, status: 'open', last_customer_at: '2026-01-01 00:00:00', last_agent_at: null, last_active: '2026-01-01 00:00:00', last_message: 'hi' }],
   getSession: async (id) => id === 's1' ? { id: 's1', customer_name: 'Ana', status: 'open', last_active: '2026-01-01 00:00:00' } : null,
-  getFullHistory: async () => [{ id: 1, role: 'agent', content: '[Agent] hello', created_at: 'x' }, { id: 2, role: 'user', content: '[Agent] keep', created_at: 'y' }]
+  getFullHistory: async () => [{ id: 1, role: 'agent', content: '[Agent] hello', created_at: 'x' }, { id: 2, role: 'user', content: '[Agent] keep', created_at: 'y' }],
+  countConversations: async () => ({ open: 4, unanswered: 2 })
 }
 const settings = {
   getBusinessHours: async () => saved.hours || { enabled: true },
@@ -96,4 +97,11 @@ test('POST /api/chat/session rejects whitespace-only customerName with 400', asy
   assert.equal(res.statusCode, 400)
   assert.equal(res.json().error, 'Pakilagay po ang inyong pangalan.')
   await a.close()
+})
+
+test('GET /api/agent/stats returns open/unanswered counts and office-hours flag', async () => {
+  assert.equal((await app.inject({ url: '/api/agent/stats' })).statusCode, 401)
+  const res = await app.inject({ url: '/api/agent/stats', headers: auth })
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.json(), { open: 4, unanswered: 2, officeHoursEnabled: true })
 })

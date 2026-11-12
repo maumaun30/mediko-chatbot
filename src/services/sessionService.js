@@ -235,6 +235,14 @@ export async function setStatus(sessionId, status) {
 const UNANSWERED_SQL =
   `status = 'open' AND last_customer_at IS NOT NULL AND (last_agent_at IS NULL OR last_agent_at < last_customer_at)`
 
+/** Open and unanswered conversation counts (Gateway Home dashboard). */
+export async function countConversations() {
+  const row = await queryOne(
+    `SELECT SUM(status = 'open') AS open, SUM(${UNANSWERED_SQL}) AS unanswered FROM chat_sessions`
+  )
+  return { open: Number(row?.open || 0), unanswered: Number(row?.unanswered || 0) }
+}
+
 /**
  * List conversations for the agent inbox, newest activity first.
  * @param {object} opts
