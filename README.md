@@ -76,7 +76,7 @@ for CloudPanel/VPS deployment.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET`  | `/health` | Health check |
-| `GET`  | `/api/chat/config` | `{ aiEnabled, online, nextOpenAt, awayMessage }` |
+| `GET`  | `/api/chat/config` | `{ aiEnabled, online, nextOpenAt, awayMessage, schedule }`. `schedule` is `{ timezone, days: [{ day, open, start, end }] }` Mon→Sun, or null when office hours are off |
 | `POST` | `/api/chat/session` | Create a session. Body: `customerName`, `customerEmail`, `customerPhone` (PH mobile `09XXXXXXXXX` / `+639XXXXXXXXX`, stored as `639XXXXXXXXX`), optional `metadata`. Returns `201 { sessionId }` |
 | `POST` | `/api/chat/message` | Customer message (1-2000 chars, 15/min). Optional `hidePreview: true` when the customer removed the link card (stored in `meta`, returned as `message.hidePreview`; Gateway then shows no card either). Returns `{ message, away }` |
 | `POST` | `/api/chat/typing` | Customer typing signal, `204` |
