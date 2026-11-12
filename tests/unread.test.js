@@ -26,8 +26,13 @@ test('getFullHistory selects meta so previews come back with history', async () 
 test('messageFromRow lifts meta.preview and drops raw meta', () => {
   const p = { url: 'https://store.mediko.ph/products/x', title: 'X' }
   assert.deepEqual(messageFromRow({ id: 1, role: 'agent', content: 'hi', created_at: 't', meta: { preview: p } }),
-    { id: 1, role: 'agent', content: 'hi', created_at: 't', preview: p })
+    { id: 1, role: 'agent', content: 'hi', created_at: 't', preview: p, hidePreview: false })
   assert.deepEqual(messageFromRow({ id: 2, role: 'user', content: 'yo', created_at: 't', meta: null }),
-    { id: 2, role: 'user', content: 'yo', created_at: 't', preview: null })
+    { id: 2, role: 'user', content: 'yo', created_at: 't', preview: null, hidePreview: false })
   assert.equal(messageFromRow({ id: 3, role: 'agent', content: 'z', created_at: 't', meta: '{"preview":{"url":"u","title":"T"}}' }).preview.title, 'T')
+})
+
+test('messageFromRow lifts meta.hidePreview (customer removed the link card)', () => {
+  assert.equal(messageFromRow({ id: 1, role: 'user', content: 'x', created_at: 't', meta: { hidePreview: true } }).hidePreview, true)
+  assert.equal(messageFromRow({ id: 2, role: 'user', content: 'x', created_at: 't', meta: null }).hidePreview, false)
 })

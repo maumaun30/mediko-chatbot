@@ -78,7 +78,7 @@ for CloudPanel/VPS deployment.
 | `GET`  | `/health` | Health check |
 | `GET`  | `/api/chat/config` | `{ aiEnabled, online, nextOpenAt, awayMessage }` |
 | `POST` | `/api/chat/session` | Create a session. Body: `customerName`, `customerEmail`, `customerPhone` (PH mobile `09XXXXXXXXX` / `+639XXXXXXXXX`, stored as `639XXXXXXXXX`), optional `metadata`. Returns `201 { sessionId }` |
-| `POST` | `/api/chat/message` | Customer message (1-2000 chars, 15/min). Returns `{ message, away }` |
+| `POST` | `/api/chat/message` | Customer message (1-2000 chars, 15/min). Optional `hidePreview: true` when the customer removed the link card (stored in `meta`, returned as `message.hidePreview`; Gateway then shows no card either). Returns `{ message, away }` |
 | `POST` | `/api/chat/typing` | Customer typing signal, `204` |
 | `GET`  | `/api/chat/resume?t=<token>` | Exchange a signed email link token for `{ sessionId }`; `410 { error: 'expired' }` if invalid/expired |
 | `GET`  | `/api/chat/history/:sessionId` | Message history (`?limit=1..100`) |

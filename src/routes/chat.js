@@ -46,8 +46,9 @@ const messageSchema = {
     type: 'object',
     required: ['message', 'sessionId'],
     properties: {
-      message:   { type: 'string', minLength: 1, maxLength: 2000 },
-      sessionId: { type: 'string', format: 'uuid' }
+      message:     { type: 'string', minLength: 1, maxLength: 2000 },
+      sessionId:   { type: 'string', format: 'uuid' },
+      hidePreview: { type: 'boolean' }
     }
   }
 }
@@ -114,7 +115,7 @@ export default async function chatRoutes(fastify) {
     schema: messageSchema,
     config: { rateLimit: { max: 15, timeWindow: '1 minute' } }
   }, async (request, reply) => {
-    const { sessionId, message } = request.body
+    const { sessionId, message, hidePreview = false } = request.body
 
     const spam = spamCheck(sessionId, message)
     if (spam.blocked) {
@@ -125,7 +126,7 @@ export default async function chatRoutes(fastify) {
       return reply.status(404).send({ error: 'Session not found. Please refresh the page.' })
     }
 
-    const { message: saved, isFirst } = await recordCustomerMessage(sessionId, message)
+    const { message: saved, isFirst } = await recordCustomerMessage(sessionId, message, { hidePreview })
     try {
       const session = await getSession(sessionId)
       await hooks.onCustomerMessage(session, saved, isFirst)
