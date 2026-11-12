@@ -41,7 +41,7 @@ export default fp(async function plugins(fastify) {
     // The plugin throws this object, so it needs statusCode (else Fastify answers 500).
     errorResponseBuilder: () => ({
       statusCode: 429,
-      error: 'Masyadong maraming mensahe. Pakihintay ng ilang segundo bago subukang muli.'
+      error: 'Too many messages. Please wait a few seconds and try again.'
     })
   })
 

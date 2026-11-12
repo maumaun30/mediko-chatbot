@@ -20,3 +20,14 @@ test('no open day -> null', () => {
   const none = { ...bh, hours: {} }
   assert.equal(nextOpenAt(none, new Date('2026-11-11T02:00:00Z')), null)
 })
+
+test('publicSchedule: office days/hours for the widget, null when office hours are off', async () => {
+  const { publicSchedule } = await import('../src/services/hours.js')
+  const out = publicSchedule(bh)
+  assert.equal(out.timezone, 'Asia/Manila')
+  assert.deepEqual(out.days[0], { day: 'mon', open: true, start: '08:00', end: '17:00' })
+  assert.deepEqual(out.days[5], { day: 'sat', open: false, start: null, end: null })
+  assert.equal(out.days.length, 7)
+  assert.equal(publicSchedule({ ...bh, enabled: false }), null)
+  assert.equal(publicSchedule(null), null)
+})

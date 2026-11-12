@@ -11,19 +11,19 @@ test('validatePrechat requires all three', async () => {
   assert.equal(ok.value.customerPhone, '0917 123 4567'.replace(/[\s-]/g, ''))
 })
 
-test('validatePrechat: Filipino error copy, trimming and edge cases', async () => {
+test('validatePrechat: error copy, trimming and edge cases', async () => {
   const { validatePrechat } = await import('../../mediko-widget/src/prechat.js')
   const bad = validatePrechat({})
   assert.equal(bad.ok, false)
-  assert.equal(bad.errors.name,  'Pakilagay po ang inyong pangalan.')
-  assert.equal(bad.errors.email, 'Pakilagay po ang tamang email.')
-  assert.equal(bad.errors.phone, 'Pakilagay po ang tamang mobile number (09XXXXXXXXX).')
+  assert.equal(bad.errors.name,  'Please enter your name.')
+  assert.equal(bad.errors.email, 'Please enter a valid email.')
+  assert.equal(bad.errors.phone, 'Please enter a valid mobile number (09XXXXXXXXX).')
 
   const ok = validatePrechat({ name: '  Ana Cruz ', email: ' ana@mail.com ', phone: '+63917-123-4567' })
   assert.equal(ok.ok, true)
   assert.deepEqual(ok.value, { customerName: 'Ana Cruz', customerEmail: 'ana@mail.com', customerPhone: '+639171234567' })
 
-  assert.equal(validatePrechat({ name: 'x'.repeat(101), email: 'a@b.co', phone: '09171234567' }).errors.name, 'Pakilagay po ang inyong pangalan.')
+  assert.equal(validatePrechat({ name: 'x'.repeat(101), email: 'a@b.co', phone: '09171234567' }).errors.name, 'Please enter your name.')
   assert.equal(validatePrechat({ name: 'x'.repeat(100), email: 'a@b.co', phone: '09171234567' }).ok, true)
   assert.ok(validatePrechat({ name: 'A', email: 'a@b.co', phone: '0917123456' }).errors.phone, '10 digits rejected')
   assert.ok(validatePrechat({ name: 'A', email: 'a@b.co', phone: '639171234567' }).errors.phone, 'no 09/+639 prefix rejected')
@@ -38,18 +38,6 @@ test('readResumeToken', async () => {
   assert.equal(readResumeToken('?mdk_chat='), null)
   assert.equal(readResumeToken('?other=1'), null)
   assert.equal(readResumeToken(undefined), null)
-})
-
-test('formatNextOpen formats in Asia/Manila like "Lun 8:00 AM"', async () => {
-  const { formatNextOpen } = await import('../../mediko-widget/src/prechat.js')
-  // Mon 2026-11-16 08:00 Manila = 00:00 UTC
-  assert.equal(formatNextOpen('2026-11-16T00:00:00.000Z'), 'Lun 8:00 AM')
-  // Sat 2026-11-14 13:05 Manila = 05:05 UTC
-  assert.equal(formatNextOpen('2026-11-14T05:05:00.000Z'), 'Sab 1:05 PM')
-  // Sun 2026-11-15 00:30 Manila = Sat 16:30 UTC
-  assert.equal(formatNextOpen('2026-11-14T16:30:00.000Z'), 'Lin 12:30 AM')
-  assert.equal(formatNextOpen(null), '')
-  assert.equal(formatNextOpen('garbage'), '')
 })
 
 test('reconcileSent renames the temp row to the server id', async () => {
@@ -140,13 +128,32 @@ test('Message.jsx renders links through tokenizeLinks with safe rel/target', asy
   assert.match(src, /href=\{tok\.href\} target="_blank" rel="noopener noreferrer"/)
 })
 
-test('a 404 on send shows local Filipino copy, not the server text', async () => {
+test('a 404 on send shows local copy, not the server text', async () => {
   const { SESSION_GONE } = await import('../../mediko-widget/src/messages.js')
-  assert.match(SESSION_GONE, /po/)
+  assert.match(SESSION_GONE, /chat has ended/)
   assert.ok(!/session|refresh/i.test(SESSION_GONE))
   const { readFileSync } = await import('node:fs')
   const src = readFileSync(new URL('../../mediko-widget/src/hooks/useChat.js', import.meta.url), 'utf8')
   const branch = src.slice(src.indexOf('if (res.status === 404) {'), src.indexOf('if (!res.ok) {', src.indexOf('if (res.status === 404) {')))
   assert.ok(branch.includes('setError(SESSION_GONE)'))
   assert.ok(!branch.includes('readError'))
+})
+
+test('formatSchedule groups consecutive days with the same hours', async () => {
+  const { formatSchedule } = await import('../../mediko-widget/src/schedule.js')
+  const day = (d, open, start = null, end = null) => ({ day: d, open, start, end })
+  const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri'].map(d => day(d, true, '08:00', '17:00'))
+  assert.deepEqual(formatSchedule({ days: [...weekdays, day('sat', false), day('sun', false)] }), [
+    { days: 'Mon–Fri', hours: '8:00 AM–5:00 PM' },
+    { days: 'Sat–Sun', hours: 'Closed' }
+  ])
+  assert.deepEqual(formatSchedule({ days: [day('mon', true, '08:00', '17:00'), day('tue', false), day('wed', true, '08:00', '17:00'),
+    day('thu', true, '08:00', '17:00'), day('fri', true, '09:30', '12:00'), day('sat', false), day('sun', false)] }), [
+    { days: 'Mon', hours: '8:00 AM–5:00 PM' },
+    { days: 'Tue', hours: 'Closed' },
+    { days: 'Wed–Thu', hours: '8:00 AM–5:00 PM' },
+    { days: 'Fri', hours: '9:30 AM–12:00 PM' },
+    { days: 'Sat–Sun', hours: 'Closed' }
+  ])
+  assert.deepEqual(formatSchedule(null), [])
 })

@@ -46,3 +46,22 @@ export function nextOpenAt(bh, date) {
   }
   return null
 }
+
+const SCHEDULE_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/**
+ * Office schedule the widget can show (Mon→Sun), or null when office hours are
+ * off (chat treated as always open). Only open/start/end leave the server.
+ */
+export function publicSchedule(bh) {
+  if (!bh || bh.enabled === false) return null
+  return {
+    timezone: bh.timezone || 'Asia/Manila',
+    days: SCHEDULE_DAYS.map(day => {
+      const h = bh.hours?.[day] || {}
+      const open = !!h.open && HHMM.test(h.start || '') && HHMM.test(h.end || '')
+      return { day, open, start: open ? h.start : null, end: open ? h.end : null }
+    })
+  }
+}

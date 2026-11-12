@@ -1,5 +1,6 @@
 import { createSession, sessionExists, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession } from '../services/sessionService.js'
 import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
+import { publicSchedule } from '../services/hours.js'
 import { normalizePhMobile } from '../services/phone.js'
 import { verifyChatLink } from '../services/agentAuth.js'
 import { corsOriginFor } from '../plugins/security.js'
@@ -88,7 +89,8 @@ export default async function chatRoutes(fastify) {
       aiEnabled:   aiEnabled(),
       online,
       nextOpenAt:  next ? next.toISOString() : null,
-      awayMessage: await getAwayMessage()
+      awayMessage: await getAwayMessage(),
+      schedule:    publicSchedule(bh)
     })
   })
 
@@ -97,11 +99,11 @@ export default async function chatRoutes(fastify) {
   fastify.post('/session', { schema: sessionCreateSchema }, async (request, reply) => {
     const { customerName, customerEmail, customerPhone, metadata } = request.body
     if (!customerName.trim()) {
-      return reply.status(400).send({ error: 'Pakilagay po ang inyong pangalan.' })
+      return reply.status(400).send({ error: 'Please enter your name.' })
     }
     const phone = normalizePhMobile(customerPhone)
     if (!phone) {
-      return reply.status(400).send({ error: 'Pakilagay po ang tamang mobile number (09XXXXXXXXX).' })
+      return reply.status(400).send({ error: 'Please enter a valid mobile number (09XXXXXXXXX).' })
     }
     const sessionId = await createSession({
       channel: 'widget', customerName: customerName.trim(), customerEmail, customerPhone: phone, metadata
