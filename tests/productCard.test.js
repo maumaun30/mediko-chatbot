@@ -31,3 +31,12 @@ test('fromAjaxProduct handles missing image, bad price and junk input', async ()
   assert.equal(fromAjaxProduct({ price: 100 }), null)
   assert.equal(fromAjaxProduct({ title: 'X', price: 100, featured_image: 'javascript:alert(1)' }).image, null)
 })
+
+test('isStoreProductUrl: only product pages on the current store host', async () => {
+  const { isStoreProductUrl } = await load()
+  assert.equal(isStoreProductUrl('https://store.mediko.ph/products/genacol-90s', 'store.mediko.ph'), true)
+  assert.equal(isStoreProductUrl('https://store.mediko.ph/products/genacol-90s?variant=2', 'store.mediko.ph'), true)
+  assert.equal(isStoreProductUrl('https://other.ph/products/genacol-90s', 'store.mediko.ph'), false)
+  assert.equal(isStoreProductUrl('https://store.mediko.ph/pages/about', 'store.mediko.ph'), false)
+  assert.equal(isStoreProductUrl('not a url', 'store.mediko.ph'), false)
+})
