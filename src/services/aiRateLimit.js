@@ -112,13 +112,13 @@ export function spamCheck(key, text) {
   return { blocked: false }
 }
 
-/** Friendly Tagalog message for a blocked/throttled state. */
+/** Message for a blocked/throttled state. burst/duplicate/default reach the widget as errors (English); the AI quota ones are AI chat replies (Tagalog). */
 export function throttleMessage(reason) {
   switch (reason) {
     case 'burst':
-      return 'Sandali lang po — masyadong mabilis ang mga mensahe. Maghintay po ng ilang segundo bago magpadala ulit. 🙏'
+      return 'You’re sending messages too fast. Please wait a few seconds.'
     case 'duplicate':
-      return 'Naitanong nyo na po ito kani-kanina lang. 😊 May iba pa po ba akong maitutulong?'
+      return 'You just sent this message.'
     case 'session_daily':
       return 'Naabot na po ang limitasyon ng mensahe para ngayong araw. Maaari po kayong bumalik bukas, o pindutin ang "Kausapin ang Ahente" para sa tulong ng aming team.'
     case 'minute':
@@ -126,7 +126,7 @@ export function throttleMessage(reason) {
     case 'daily':
       return 'Pasensya na po, abala na sa ngayon ang aming AI assistant. Pindutin po ang "Kausapin ang Ahente" para matulungan kayo ng aming team, o subukan ulit bukas.'
     default:
-      return 'Sandali lang po at subukan ulit.'
+      return 'Please wait a moment and try again.'
   }
 }
 

@@ -99,11 +99,11 @@ export default async function chatRoutes(fastify) {
   fastify.post('/session', { schema: sessionCreateSchema }, async (request, reply) => {
     const { customerName, customerEmail, customerPhone, metadata } = request.body
     if (!customerName.trim()) {
-      return reply.status(400).send({ error: 'Pakilagay po ang inyong pangalan.' })
+      return reply.status(400).send({ error: 'Please enter your name.' })
     }
     const phone = normalizePhMobile(customerPhone)
     if (!phone) {
-      return reply.status(400).send({ error: 'Pakilagay po ang tamang mobile number (09XXXXXXXXX).' })
+      return reply.status(400).send({ error: 'Please enter a valid mobile number (09XXXXXXXXX).' })
     }
     const sessionId = await createSession({
       channel: 'widget', customerName: customerName.trim(), customerEmail, customerPhone: phone, metadata

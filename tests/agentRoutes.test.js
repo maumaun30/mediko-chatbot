@@ -95,7 +95,7 @@ test('POST /api/chat/session rejects whitespace-only customerName with 400', asy
     payload: { customerName: '   ', customerEmail: 'a@b.co', customerPhone: '09171234567' }
   })
   assert.equal(res.statusCode, 400)
-  assert.equal(res.json().error, 'Pakilagay po ang inyong pangalan.')
+  assert.equal(res.json().error, 'Please enter your name.')
   await a.close()
 })
 
