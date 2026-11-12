@@ -150,3 +150,22 @@ test('a 404 on send shows local Filipino copy, not the server text', async () =>
   assert.ok(branch.includes('setError(SESSION_GONE)'))
   assert.ok(!branch.includes('readError'))
 })
+
+test('formatSchedule groups consecutive days with the same hours', async () => {
+  const { formatSchedule } = await import('../../mediko-widget/src/schedule.js')
+  const day = (d, open, start = null, end = null) => ({ day: d, open, start, end })
+  const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri'].map(d => day(d, true, '08:00', '17:00'))
+  assert.deepEqual(formatSchedule({ days: [...weekdays, day('sat', false), day('sun', false)] }), [
+    { days: 'Lun–Biy', hours: '8:00 AM–5:00 PM' },
+    { days: 'Sab–Lin', hours: 'Sarado' }
+  ])
+  assert.deepEqual(formatSchedule({ days: [day('mon', true, '08:00', '17:00'), day('tue', false), day('wed', true, '08:00', '17:00'),
+    day('thu', true, '08:00', '17:00'), day('fri', true, '09:30', '12:00'), day('sat', false), day('sun', false)] }), [
+    { days: 'Lun', hours: '8:00 AM–5:00 PM' },
+    { days: 'Mar', hours: 'Sarado' },
+    { days: 'Miy–Huw', hours: '8:00 AM–5:00 PM' },
+    { days: 'Biy', hours: '9:30 AM–12:00 PM' },
+    { days: 'Sab–Lin', hours: 'Sarado' }
+  ])
+  assert.deepEqual(formatSchedule(null), [])
+})
