@@ -41,7 +41,7 @@ export async function markSeen(sessionId) {
 export function messageFromRow({ meta, ...row }) {
   let m = meta
   if (typeof m === 'string') { try { m = JSON.parse(m) } catch { m = null } }
-  return { ...row, preview: m?.preview ?? null }
+  return { ...row, preview: m?.preview ?? null, hidePreview: m?.hidePreview === true }
 }
 
 export function isUnanswered({ status, last_customer_at, last_agent_at } = {}) {
@@ -211,20 +211,24 @@ async function insertMessage(sessionId, role, content, at, meta = null) {
     `INSERT INTO chat_messages (id, session_id, role, content, created_at, meta) VALUES (?, ?, ?, ?, ?, ?)`,
     [id, sessionId, role, content, at, meta ? JSON.stringify(meta) : null]
   )
-  return { id, role, content, created_at: dbTimeString(at), preview: meta?.preview ?? null }
+  return { id, role, content, created_at: dbTimeString(at), preview: meta?.preview ?? null, hidePreview: meta?.hidePreview === true }
 }
 
 /**
  * Save a customer message and update session activity (reopens the session).
  * @returns {Promise<{ message: object, isFirst: boolean }>}
  */
-export async function recordCustomerMessage(sessionId, text) {
+/**
+ * @param {object} [opts]
+ * @param {boolean} [opts.hidePreview] customer removed the link preview card (agents don't show it either)
+ */
+export async function recordCustomerMessage(sessionId, text, { hidePreview = false } = {}) {
   const prior = await queryOne(
     `SELECT COUNT(*) AS n FROM chat_messages WHERE session_id = ? AND role = 'user'`,
     [sessionId]
   )
   const now = new Date()
-  const message = await insertMessage(sessionId, 'user', text, now)
+  const message = await insertMessage(sessionId, 'user', text, now, hidePreview ? { hidePreview: true } : null)
   await query(
     `UPDATE chat_sessions SET last_customer_at = ?, last_active = ?, status = 'open' WHERE id = ?`,
     [now, now, sessionId]
