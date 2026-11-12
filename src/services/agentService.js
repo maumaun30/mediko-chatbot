@@ -25,6 +25,7 @@ import { dispatchReply as realDispatchReply } from './responseDispatcher.js'
 import { toConversation } from './conversationView.js'
 import { hooks } from './chatEvents.js'
 import { verifyAgentToken } from './agentAuth.js'
+import { validatePreview } from './linkPreview.js'
 
 const AGENT_PATH = '/api/agent/ws'
 const MAX_TEXT = 2000
@@ -243,6 +244,7 @@ export async function handleAgentCommand(cmd, d = {}) {
   const getSession = d.getSession || realSessions.getSession
   const saveAgentMessage = d.saveAgentMessage || realSessions.saveAgentMessage
   const setStatus = d.setStatus || realSessions.setStatus
+  const markSeen = d.markSeen || realSessions.markSeen
   const dispatchReply = d.dispatchReply || realDispatchReply
   const emit = d.broadcast || broadcast
   const push = d.pushToWidget || pushToWidget
@@ -250,7 +252,7 @@ export async function handleAgentCommand(cmd, d = {}) {
 
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) throw badInput('Invalid command')
   const { type, sessionId } = cmd
-  if (!['agent_message', 'typing', 'close', 'reopen'].includes(type)) throw badInput(`Unknown command: ${String(type).slice(0, 40)}`)
+  if (!['agent_message', 'typing', 'close', 'reopen', 'seen'].includes(type)) throw badInput(`Unknown command: ${String(type).slice(0, 40)}`)
   if (typeof sessionId !== 'string' || !sessionId) throw badInput('sessionId is required')
   const session = await getSession(sessionId)
   if (!session) throw badInput('Unknown session')
@@ -266,8 +268,10 @@ export async function handleAgentCommand(cmd, d = {}) {
       if (typeof text !== 'string' || !text.trim() || text.length > MAX_TEXT) {
         throw badInput(`text must be 1-${MAX_TEXT} characters`)
       }
+      const pv = validatePreview(cmd.preview)
+      if (!pv.ok) throw badInput(pv.error)
       await dispatchReply(session.channel, session.channel_user_id, text) // no-op for widget
-      const message = await saveAgentMessage(sessionId, text)
+      const message = await saveAgentMessage(sessionId, text, pv.preview)
       try { await onAgentMessage(session, message) } catch (err) { console.error('[agentWs] onAgentMessage failed:', err?.message) }
       const clientId = clientIdOf(cmd)
       emit({ type: 'agent_sent', sessionId, message, ...(clientId && { clientId }) })
@@ -277,6 +281,11 @@ export async function handleAgentCommand(cmd, d = {}) {
     }
     case 'typing':
       push(sessionId, { type: 'agent_typing', value: !!cmd.value })
+      break
+    case 'seen':
+      // An agent opened the chat: clears "New" for every agent.
+      await markSeen(sessionId)
+      await updated()
       break
     case 'close':
     case 'reopen':

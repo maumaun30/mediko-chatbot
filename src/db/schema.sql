@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
   last_agent_at       DATETIME(3)  NULL,
   alerted_at          DATETIME(3)  NULL,
   customer_emailed_at DATETIME(3)  NULL,
+  agent_seen_at   DATETIME(3)   NULL,
   INDEX idx_sessions_mode         (mode, last_active),
   INDEX idx_sessions_status       (status, last_customer_at),
   INDEX idx_sessions_channel_user (channel, channel_user_id)
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content     TEXT         NOT NULL,
   created_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   tokens_used INT          NULL,
+  meta        JSON         NULL,
   UNIQUE KEY uq_messages_seq (seq),
   INDEX idx_messages_session (session_id, seq),
   CONSTRAINT fk_messages_session FOREIGN KEY (session_id)

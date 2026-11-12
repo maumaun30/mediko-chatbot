@@ -30,7 +30,7 @@ test('getFullHistory returns the latest N messages in chronological order', asyn
   const rows = [{ id: 'a', role: 'user', content: 'hi', created_at: 'x' }]
   const run = async (sql, params) => { calls.push({ sql, params }); return rows }
   const out = await getFullHistory('s1', 20, { run })
-  assert.equal(out, rows)
+  assert.deepEqual(out, [{ ...rows[0], preview: null }])
   assert.equal(calls.length, 1)
   const sql = calls[0].sql.replace(/\s+/g, ' ')
   assert.deepEqual(calls[0].params, ['s1'])

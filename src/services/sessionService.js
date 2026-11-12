@@ -24,6 +24,26 @@ export function parseDbTime(v) {
 }
 
 /** True when the customer wrote last and no agent has replied since (open sessions only). */
+/** "New" in the agent inbox: the customer wrote after an agent last opened the chat. */
+export function isUnread({ last_customer_at, agent_seen_at } = {}) {
+  const c = parseDbTime(last_customer_at)
+  if (c === null) return false
+  const s = parseDbTime(agent_seen_at)
+  return s === null || s < c
+}
+
+/** Mark the chat as seen by an agent (clears "New" for everyone). */
+export async function markSeen(sessionId) {
+  await query('UPDATE chat_sessions SET agent_seen_at = ? WHERE id = ?', [new Date(), sessionId])
+}
+
+/** A chat_messages row as sent to clients: meta.preview lifted to `preview`. */
+export function messageFromRow({ meta, ...row }) {
+  let m = meta
+  if (typeof m === 'string') { try { m = JSON.parse(m) } catch { m = null } }
+  return { ...row, preview: m?.preview ?? null }
+}
+
 export function isUnanswered({ status, last_customer_at, last_agent_at } = {}) {
   if (status !== 'open') return false
   const c = parseDbTime(last_customer_at)
@@ -185,13 +205,13 @@ export async function saveMessagePair(sessionId, userMessage, assistantMessage, 
   }
 }
 
-async function insertMessage(sessionId, role, content, at) {
+async function insertMessage(sessionId, role, content, at, meta = null) {
   const id = randomUUID()
   await query(
-    `INSERT INTO chat_messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)`,
-    [id, sessionId, role, content, at]
+    `INSERT INTO chat_messages (id, session_id, role, content, created_at, meta) VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, sessionId, role, content, at, meta ? JSON.stringify(meta) : null]
   )
-  return { id, role, content, created_at: dbTimeString(at) }
+  return { id, role, content, created_at: dbTimeString(at), preview: meta?.preview ?? null }
 }
 
 /**
@@ -216,12 +236,12 @@ export async function recordCustomerMessage(sessionId, text) {
  * Save a message sent by a human agent (role 'agent', no prefix).
  * @returns {Promise<object>} message
  */
-export async function saveAgentMessage(sessionId, text) {
+export async function saveAgentMessage(sessionId, text, preview = null) {
   const now = new Date()
-  const message = await insertMessage(sessionId, 'agent', text, now)
+  const message = await insertMessage(sessionId, 'agent', text, now, preview ? { preview } : null)
   await query(
-    `UPDATE chat_sessions SET last_agent_at = ?, last_active = ? WHERE id = ?`,
-    [now, now, sessionId]
+    `UPDATE chat_sessions SET last_agent_at = ?, agent_seen_at = ?, last_active = ? WHERE id = ?`,
+    [now, now, now, sessionId]
   )
   return message
 }
@@ -299,13 +319,14 @@ export async function markEmailed(id, at) {
 /** Latest `limit` messages (1..100, default 50) of a session, oldest first. */
 export async function getFullHistory(sessionId, limit = 50, { run = query } = {}) {
   const lim = Math.max(1, Math.min(parseInt(limit, 10) || 50, 100))
-  return run(
-    `SELECT id, role, content, created_at FROM (
-       SELECT id, role, content, created_at, seq FROM chat_messages
+  const rows = await run(
+    `SELECT id, role, content, created_at, meta FROM (
+       SELECT id, role, content, created_at, meta, seq FROM chat_messages
        WHERE session_id = ?
        ORDER BY seq DESC LIMIT ${lim}
      ) AS latest
      ORDER BY latest.seq ASC`,
     [sessionId]
   )
+  return rows.map(messageFromRow)
 }
