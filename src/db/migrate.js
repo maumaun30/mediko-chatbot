@@ -7,7 +7,8 @@ const SESSION_COLUMNS = [
   ['last_customer_at',    'DATETIME(3) NULL'],
   ['last_agent_at',       'DATETIME(3) NULL'],
   ['alerted_at',          'DATETIME(3) NULL'],
-  ['customer_emailed_at', 'DATETIME(3) NULL']
+  ['customer_emailed_at', 'DATETIME(3) NULL'],
+  ['agent_seen_at',       'DATETIME(3) NULL']
 ]
 
 async function ensureColumn({ query, queryOne }, table, column, ddl) {
@@ -33,6 +34,11 @@ export async function migrate(d = db) {
   const { query } = d
   for (const [col, ddl] of SESSION_COLUMNS) await ensureColumn(d, 'chat_sessions', col, ddl)
   await ensureIndex(d, 'chat_sessions', 'idx_sessions_status', 'status, last_customer_at')
+  // Link previews attached to agent replies ({ preview: {...} }).
+  await ensureColumn(d, 'chat_messages', 'meta', 'JSON NULL')
+  // Chats an agent already replied to (before "seen" existed) count as seen,
+  // so "New" doesn't light up the whole inbox after upgrading.
+  await query(`UPDATE chat_sessions SET agent_seen_at = last_agent_at WHERE agent_seen_at IS NULL AND last_agent_at IS NOT NULL`)
   // Legacy agent messages were stored as assistant rows prefixed "[Agent] " (8 chars).
   await query(
     `UPDATE chat_messages SET role = 'agent', content = SUBSTRING(content, 9)

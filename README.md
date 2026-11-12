@@ -123,18 +123,19 @@ Every event also carries `ts` (ISO time).
 { "type": "error", "message": "..." }
 ```
 
-`conversation` is `{ id, displayName, email, phone, status, unanswered, online, lastMessage, lastActive }`.
+`conversation` is `{ id, displayName, email, phone, status, unanswered, unread, online, lastMessage, lastActive }`. `unanswered` = the customer wrote after the last agent reply; `unread` (the inbox "New" badge) = the customer wrote after an agent last opened the chat (`seen`) or replied.
 
 ### Agent -> server
 
 ```json
-{ "type": "agent_message", "sessionId": "...", "text": "Hello po!" }
+{ "type": "agent_message", "sessionId": "...", "text": "Hello po!", "preview": { "url": "...", "title": "...", "description": null, "image": null, "price": "1899.00", "currency": "PHP" } }
 { "type": "typing",        "sessionId": "...", "value": true }
 { "type": "close",         "sessionId": "..." }
 { "type": "reopen",        "sessionId": "..." }
+{ "type": "seen",          "sessionId": "..." }
 ```
 
-`text` must be 1-2000 characters. Bad input returns `{ "type": "error" }`.
+`text` must be 1-2000 characters. `preview` is optional (Gateway builds it from the Shopify Admin API); it is validated by `linkPreview.js`: https URL on a `LINK_PREVIEW_HOSTS` host (default `store.mediko.ph,mediko.ph`), image only from `https://cdn.shopify.com/`, bounded text. It is stored in `chat_messages.meta` and returned as `message.preview` in history, `agent_sent` and the widget's `agent_message`. Bad input returns `{ "type": "error" }`.
 
 ---
 

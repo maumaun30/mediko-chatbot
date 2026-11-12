@@ -3,7 +3,7 @@
  * Shared by routes/agent.js (REST) and agentService.js (WebSocket) so neither
  * has to import the other.
  */
-import { isUnanswered, stripAgentPrefix } from './sessionService.js'
+import { isUnanswered, isUnread, stripAgentPrefix } from './sessionService.js'
 
 export function toConversation(row, online) {
   return {
@@ -13,6 +13,7 @@ export function toConversation(row, online) {
     phone: row.customer_phone ?? null,
     status: row.status,
     unanswered: isUnanswered(row),
+    unread: isUnread(row),
     online: !!online,
     lastMessage: stripAgentPrefix(row.last_message) ?? null,
     lastActive: row.last_active ?? null
