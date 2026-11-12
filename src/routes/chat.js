@@ -1,19 +1,63 @@
-import { createSession, sessionExists, getSessionMode, loadHistory, saveMessagePair, getFullHistory } from '../services/sessionService.js'
-import { isWithinBusinessHours, getBusinessHours } from '../services/settingsService.js'
+import { createSession, sessionExists, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession } from '../services/sessionService.js'
+import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
+import { normalizePhMobile } from '../services/phone.js'
+import { verifyChatLink } from '../services/agentAuth.js'
+import { corsOriginFor } from '../plugins/security.js'
+import { hooks } from '../services/chatEvents.js'
 import { processMessage } from '../services/conversationManager.js'
 import { buildMessages }  from '../services/promptService.js'
-import { streamChat }     from '../services/openaiService.js'
+import { streamChat }     from '../services/geminiService.js'
 import { fromWidgetRequest } from '../channels/widgetAdapter.js'
+import { subscribeWidget, unsubscribeWidget, notifySessionUpdated } from '../services/agentService.js'
+import { spamCheck, consumeAiQuota, throttleMessage } from '../services/aiRateLimit.js'
+import { maskId } from '../services/redact.js'
+
+// Open an SSE stream with the right CORS header (reply.raw bypasses @fastify/cors).
+function openSSE(request, reply) {
+  const corsOrigin = corsOriginFor(request.headers.origin)
+
+  reply.raw.writeHead(200, {
+    'Content-Type':                'text/event-stream',
+    'Cache-Control':               'no-cache, no-transform',
+    'Connection':                  'keep-alive',
+    'X-Accel-Buffering':           'no',
+    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Headers':'Content-Type'
+  })
+  return (data) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+}
 
 const sessionCreateSchema = {
   body: {
     type: 'object',
+    required: ['customerName', 'customerEmail', 'customerPhone'],
     properties: {
+      customerName:  { type: 'string', minLength: 1, maxLength: 100 },
       customerEmail: { type: 'string', format: 'email' },
+      customerPhone: { type: 'string', minLength: 1, maxLength: 40 },
       metadata:      { type: 'object' }
     }
   },
   response: { 201: { type: 'object', properties: { sessionId: { type: 'string' } } } }
+}
+
+const messageSchema = {
+  body: {
+    type: 'object',
+    required: ['message', 'sessionId'],
+    properties: {
+      message:   { type: 'string', minLength: 1, maxLength: 2000 },
+      sessionId: { type: 'string', format: 'uuid' }
+    }
+  }
+}
+
+const typingSchema = {
+  body: {
+    type: 'object',
+    required: ['sessionId'],
+    properties: { sessionId: { type: 'string', format: 'uuid' } }
+  }
 }
 
 const chatSchema = {
@@ -34,26 +78,96 @@ const historySchema = {
 
 export default async function chatRoutes(fastify) {
 
-  // GET /api/chat/config — public widget config (AI kill-switch, etc.)
+  // GET /api/chat/config - public widget config
   fastify.get('/config', async (_request, reply) => {
-    const aiEnabled = process.env.AI_ENABLED !== 'false'
+    const bh     = await getBusinessHours()
+    const online = await isWithinBusinessHours()
+    const next   = online ? null : nextOpenAt(bh, new Date())
     return reply.send({
-      aiEnabled,
-      aiDisabledMessage: aiEnabled ? null : (process.env.AI_DISABLED_MESSAGE || null)
+      aiEnabled:   aiEnabled(),
+      online,
+      nextOpenAt:  next ? next.toISOString() : null,
+      awayMessage: await getAwayMessage()
     })
   })
 
 
   // POST /api/chat/session
   fastify.post('/session', { schema: sessionCreateSchema }, async (request, reply) => {
-    const { customerEmail, metadata } = request.body || {}
-    const sessionId = await createSession({ channel: 'widget', customerEmail, metadata })
+    const { customerName, customerEmail, customerPhone, metadata } = request.body
+    if (!customerName.trim()) {
+      return reply.status(400).send({ error: 'Pakilagay po ang inyong pangalan.' })
+    }
+    const phone = normalizePhMobile(customerPhone)
+    if (!phone) {
+      return reply.status(400).send({ error: 'Pakilagay po ang tamang mobile number (09XXXXXXXXX).' })
+    }
+    const sessionId = await createSession({
+      channel: 'widget', customerName: customerName.trim(), customerEmail, customerPhone: phone, metadata
+    })
     return reply.status(201).send({ sessionId })
   })
 
 
+  // POST /api/chat/message - customer message to the human team
+  fastify.post('/message', {
+    schema: messageSchema,
+    config: { rateLimit: { max: 15, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const { sessionId, message } = request.body
+
+    const spam = spamCheck(sessionId, message)
+    if (spam.blocked) {
+      return reply.status(429).send({ error: throttleMessage(spam.reason) })
+    }
+
+    if (!(await sessionExists(sessionId))) {
+      return reply.status(404).send({ error: 'Session not found. Please refresh the page.' })
+    }
+
+    const { message: saved, isFirst } = await recordCustomerMessage(sessionId, message)
+    try {
+      const session = await getSession(sessionId)
+      await hooks.onCustomerMessage(session, saved, isFirst)
+    } catch (err) {
+      fastify.log.error({ err: err.message, sessionId: maskId(sessionId) }, 'onCustomerMessage hook failed')
+    }
+
+    const online = await isWithinBusinessHours()
+    return reply.send({ message: saved, away: online ? null : await getAwayMessage() })
+  })
+
+
+  // POST /api/chat/typing - own bucket so typing never drains the global limit
+  fastify.post('/typing', {
+    schema: typingSchema,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    try {
+      await hooks.onCustomerTyping(request.body.sessionId)
+    } catch (err) {
+      fastify.log.error({ err: err.message }, 'onCustomerTyping hook failed')
+    }
+    return reply.status(204).send()
+  })
+
+
+  // GET /api/chat/resume?t=<signed link token>
+  fastify.get('/resume', async (request, reply) => {
+    const sessionId = verifyChatLink(String(request.query?.t || ''))
+    if (!sessionId) return reply.status(410).send({ error: 'expired' })
+    return reply.send({ sessionId })
+  })
+
+
   // POST /api/chat  — widget SSE streaming endpoint
-  fastify.post('/', { schema: chatSchema }, async (request, reply) => {
+  // Per-IP rate limit (tighter than the global default) on the expensive route.
+  fastify.post('/', {
+    schema: chatSchema,
+    config: { rateLimit: { max: 15, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+
+    if (!aiEnabled()) return reply.status(409).send({ error: 'AI is off' })
 
     // ── 1. Normalise to channel-agnostic format ──────────────
     let msg
@@ -61,6 +175,16 @@ export default async function chatRoutes(fastify) {
       msg = fromWidgetRequest(request.body)
     } catch (err) {
       return reply.status(400).send({ error: err.message })
+    }
+
+    // ── 1b. Spam guard — block bursts / duplicate floods before any work ─
+    const spam = spamCheck(msg.sessionId, msg.text)
+    if (spam.blocked) {
+      const send = openSSE(request, reply)
+      send({ type: 'chunk', text: throttleMessage(spam.reason) })
+      send({ type: 'done', tokens: 0 })
+      reply.raw.end()
+      return
     }
 
     // ── 2. Conversation manager — check mode, detect handoff ─
@@ -74,25 +198,8 @@ export default async function chatRoutes(fastify) {
       throw err
     }
 
-    // ── 3. SSE headers ───────────────────────────────────────
-    // Must set CORS header manually here — reply.raw.writeHead() bypasses
-    // @fastify/cors because it writes directly to the Node http response.
-    const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
-    const requestOrigin = request.headers.origin || ''
-    const corsOrigin = allowedOrigin === '*'
-      ? '*'
-      : (requestOrigin === allowedOrigin ? requestOrigin : '')
-
-    reply.raw.writeHead(200, {
-      'Content-Type':                'text/event-stream',
-      'Cache-Control':               'no-cache, no-transform',
-      'Connection':                  'keep-alive',
-      'X-Accel-Buffering':           'no',
-      'Access-Control-Allow-Origin': corsOrigin,
-      'Access-Control-Allow-Headers':'Content-Type'
-    })
-
-    const send = (data) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+    // ── 3. Open SSE stream ───────────────────────────────────
+    const send = openSSE(request, reply)
 
     // ── 4. Handle off-topic, handoff, and agent cases ──────────
     if (decision.type === 'off_topic') {
@@ -106,7 +213,7 @@ export default async function chatRoutes(fastify) {
       const isOpen = await isWithinBusinessHours()
       if (!isOpen) {
         const bh = await getBusinessHours()
-        const awayMsg = bh?.away_message || 'Pasensya na po, wala pa kaming available na agent ngayon. Maaari kayong mag-iwan ng mensahe at babalik kami sa inyo sa susunod na araw ng negosyo.'
+        const awayMsg = bh?.awayMessage || 'Pasensya na po, wala pa kaming available na agent ngayon. Maaari kayong mag-iwan ng mensahe at babalik kami sa inyo sa susunod na araw ng negosyo.'
         send({ type: 'chunk', text: awayMsg })
         send({ type: 'done', tokens: 0 })
       } else {
@@ -126,19 +233,19 @@ export default async function chatRoutes(fastify) {
     }
 
     if (decision.type === 'handoff_returned') {
-      send({ type: 'chunk', text: 'Naibalik na po kayo sa aming AI assistant na si Medi. Paano ko pa kayo matutulungan?' })
+      send({ type: 'chunk', text: 'Naibalik na po kayo sa aming Mediko Assistant. Paano ko pa kayo matutulungan?' })
       send({ type: 'done', tokens: 0 })
       reply.raw.end()
       return
     }
 
-    // ── 5. AI mode — stream OpenAI response ─────────────────
-    if (process.env.AI_ENABLED === 'false') {
-      const fallback = process.env.AI_DISABLED_MESSAGE
-        || "Pasensya na po, ang aming AI assistant ay pansamantalang hindi available. Paki-click po ang 'Talk to agent' button para makausap ang aming team."
-      send({ type: 'chunk', text: fallback })
+    // ── 5. AI mode — stream Gemini response ─────────────────
+    // Global Gemini free-tier quota guard (RPM/RPD across all channels).
+    const quota = consumeAiQuota()
+    if (!quota.ok) {
+      send({ type: 'chunk', text: throttleMessage(quota.reason) })
       send({ type: 'done', tokens: 0 })
-      await saveMessagePair(decision.sessionId, decision.text, fallback, 0)
+      await saveMessagePair(decision.sessionId, decision.text, null)
       reply.raw.end()
       return
     }
@@ -165,7 +272,7 @@ export default async function chatRoutes(fastify) {
       reply.raw.end()
 
     } catch (err) {
-      fastify.log.error({ err: err.message, stack: err.stack, sessionId: decision.sessionId }, 'Chat stream error')
+      fastify.log.error({ err: err.message, stack: err.stack, sessionId: maskId(decision.sessionId) }, 'Chat stream error')
       send({ type: 'error', message: 'May nangyaring mali. Subukan ulit po.' })
       reply.raw.end()
     }
@@ -186,27 +293,14 @@ export default async function chatRoutes(fastify) {
 
 
   /**
-   * GET /api/chat/mode/:sessionId
-   * Returns the current mode of a session — used by the widget on reload
-   * to decide whether to open the agent listen stream.
-   */
-  fastify.get('/mode/:sessionId', async (request, reply) => {
-    const { sessionId } = request.params
-    const valid = await sessionExists(sessionId)
-    if (!valid) return reply.status(404).send({ error: 'Session not found' })
-    const mode = await getSessionMode(sessionId)
-    return reply.send({ sessionId, mode })
-  })
-
-
-  /**
    * GET /api/chat/listen/:sessionId
    *
-   * Long-lived SSE stream the widget subscribes to when in agent/handoff mode.
-   * The server pushes:
-   *   { type: 'agent_message', text }   — agent reply
-   *   { type: 'mode_changed',  mode }   — mode switched (e.g. back to AI)
-   *   { type: 'ping' }                  — keepalive every 25s
+   * Long-lived SSE stream the widget keeps open while it has a session (it
+   * also marks the customer online). The server pushes:
+   *   { type: 'connected' }                          — stream is live
+   *   { type: 'agent_message', message }             — agent reply row
+   *   { type: 'agent_typing',  value }               — agent typing on/off
+   *   { type: 'ping' }                               — keepalive every 20s
    */
   fastify.get('/listen/:sessionId', async (request, reply) => {
     const { sessionId } = request.params
@@ -214,12 +308,7 @@ export default async function chatRoutes(fastify) {
     const valid = await sessionExists(sessionId)
     if (!valid) return reply.status(404).send({ error: 'Session not found' })
 
-    // Always allow the configured origin (same logic as /api/chat)
-    const allowedOrigin = process.env.WIDGET_ALLOWED_ORIGIN || '*'
-    const requestOrigin = request.headers.origin || ''
-    const corsOrigin = (allowedOrigin === '*' || !allowedOrigin)
-      ? '*'
-      : requestOrigin === allowedOrigin ? requestOrigin : allowedOrigin
+    const corsOrigin = corsOriginFor(request.headers.origin)
 
     reply.raw.writeHead(200, {
       'Content-Type':                  'text/event-stream',
@@ -235,7 +324,8 @@ export default async function chatRoutes(fastify) {
     // Send an immediate connected event so the widget knows the stream is live
     raw.write('data: {"type":"connected"}\n\n')
 
-    subscribeWidget(sessionId, raw)
+    const announce = () => notifySessionUpdated(sessionId).catch(() => {})
+    if (subscribeWidget(sessionId, raw)) announce()
 
     // Keepalive ping every 20s
     const ping = setInterval(() => {
@@ -248,7 +338,7 @@ export default async function chatRoutes(fastify) {
 
     function cleanup() {
       clearInterval(ping)
-      unsubscribeWidget(sessionId, raw)
+      if (unsubscribeWidget(sessionId, raw)) announce()
       try { raw.end() } catch {}
     }
 

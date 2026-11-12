@@ -1,215 +1,287 @@
 /**
  * agentService.js
  *
- * Manages the real-time admin agent inbox.
+ * Real-time agent inbox: authenticated WebSocket for agents, widget SSE
+ * presence, and the live-event hooks.
  *
- * Uses a simple in-process WebSocket broadcast (via the `ws` package).
- * The admin dashboard connects to ws://your-server/api/agent/ws and
- * receives JSON events in real time.
+ * Server -> agent events:
+ *   connected, customer_message, agent_sent, session_updated, customer_typing,
+ *   pong (answer to an app-level ping)
  *
- * Event types emitted to agents:
- *   handoff_requested   — guest asked for a human
- *   customer_message    — message in an active agent session
- *   mode_changed        — session switched mode (ai ↔ agent)
+ * Agent -> server commands (validated; bad input gets { type: 'error', clientId? }):
+ *   { type: 'agent_message', sessionId, text, clientId? }  text 1-2000 chars;
+ *       clientId (<= 64 chars) is echoed on agent_sent so the portal can confirm the send
+ *   { type: 'typing', sessionId, value }
+ *   { type: 'close' | 'reopen', sessionId }
+ *   { type: 'ping' }  -> { type: 'pong' } (browsers cannot see protocol pings)
  *
- * Commands accepted from agents (via WebSocket):
- *   { type: 'take_over',      sessionId }  — admin takes control
- *   { type: 'return_to_ai',   sessionId }  — admin hands back to AI
- *   { type: 'agent_message',  sessionId, text }  — admin sends a reply
+ * The server also sends a protocol ping every 25 s and terminates sockets
+ * that did not answer the previous one.
  */
 
 import { WebSocketServer } from 'ws'
-import { supabase } from '../db/supabase.js'
-import { setSessionMode, saveAgentMessage } from './sessionService.js'
-import { dispatchReply, dispatchHandoffReturn } from './responseDispatcher.js'
-import { getIdleMinutes } from './settingsService.js'
+import * as realSessions from './sessionService.js'
+import { dispatchReply as realDispatchReply } from './responseDispatcher.js'
+import { toConversation } from './conversationView.js'
+import { hooks } from './chatEvents.js'
+import { verifyAgentToken } from './agentAuth.js'
 
-/** @type {Set<import('ws').WebSocket>} */
-const agentConnections = new Set()
+const AGENT_PATH = '/api/agent/ws'
+const MAX_TEXT = 2000
+const MAX_CLIENT_ID = 64
+export const HEARTBEAT_MS = 25_000
 
-/**
- * Widget SSE subscribers — map of sessionId → Set of response objects.
- * When an agent sends a message, we push it to any widget listening on that session.
- */
-const widgetSubscribers = new Map()  // sessionId → Set<reply.raw>
+// ── Presence ─────────────────────────────────────────────────
 
-/**
- * Register a widget SSE connection for a session.
- * Called from the chat route when the widget opens an agent-mode SSE stream.
- */
-export function subscribeWidget(sessionId, raw) {
-  if (!widgetSubscribers.has(sessionId)) {
-    widgetSubscribers.set(sessionId, new Set())
+/** Tracks widget SSE subscribers per session. Online = at least one. */
+export function createPresence() {
+  const map = new Map() // sessionId -> Set<raw>
+  return {
+    add(sessionId, raw) {
+      if (!map.has(sessionId)) map.set(sessionId, new Set())
+      map.get(sessionId).add(raw)
+    },
+    remove(sessionId, raw) {
+      const set = map.get(sessionId)
+      if (!set) return
+      set.delete(raw)
+      if (!set.size) map.delete(sessionId)
+    },
+    isOnline: (sessionId) => !!map.get(sessionId)?.size,
+    each(sessionId, fn) {
+      const set = map.get(sessionId)
+      if (set) for (const raw of [...set]) fn(raw)
+    }
   }
-  widgetSubscribers.get(sessionId).add(raw)
 }
 
-/**
- * Unregister a widget SSE connection (on close/error).
- */
+const presence = createPresence()
+
+export const isOnline = (sessionId) => presence.isOnline(sessionId)
+
+/** @returns {boolean} true if this subscription brought the session online */
+export function subscribeWidget(sessionId, raw) {
+  const was = presence.isOnline(sessionId)
+  presence.add(sessionId, raw)
+  return !was
+}
+
+/** @returns {boolean} true if this removal took the session offline */
 export function unsubscribeWidget(sessionId, raw) {
-  widgetSubscribers.get(sessionId)?.delete(raw)
+  const was = presence.isOnline(sessionId)
+  presence.remove(sessionId, raw)
+  return was && !presence.isOnline(sessionId)
 }
 
-/**
- * Push a message to all widget SSE connections for a session.
- * Called whenever an agent sends a reply or the mode changes.
- */
+/** Push an event to every widget SSE connection on a session. */
 export function pushToWidget(sessionId, event) {
-  const subs = widgetSubscribers.get(sessionId)
-  if (!subs?.size) return
   const line = `data: ${JSON.stringify(event)}\n\n`
-  for (const raw of subs) {
+  presence.each(sessionId, (raw) => {
     try {
       raw.write(line)
       if (typeof raw.flush === 'function') raw.flush()
-    } catch { subs.delete(raw) }
+    } catch { presence.remove(sessionId, raw) }
+  })
+}
+
+// ── Agent sockets + broadcast ────────────────────────────────
+
+/** @type {Set<{ readyState: number, send: Function }>} */
+const agentConnections = new Set()
+
+/** Register an agent socket; returns an unregister function. */
+export function registerAgentSocket(ws) {
+  agentConnections.add(ws)
+  return () => agentConnections.delete(ws)
+}
+
+/** Send an event to every connected agent. */
+export function broadcast(event) {
+  const payload = JSON.stringify({ ...event, ts: new Date().toISOString() })
+  for (const ws of agentConnections) {
+    if (ws.readyState !== 1 /* OPEN */) continue
+    try { ws.send(payload) } catch { agentConnections.delete(ws) }
   }
 }
 
-// ── WebSocket server setup ───────────────────────────────────
+function conversationFor(row, lastMessage) {
+  const view = lastMessage === undefined ? row : { ...row, last_message: lastMessage }
+  return toConversation(view, isOnline(row.id))
+}
+
+/** Re-read a session and tell agents (status / presence changed). */
+export async function notifySessionUpdated(sessionId, sessions = realSessions) {
+  const row = await sessions.getSession(sessionId)
+  if (row) broadcast({ type: 'session_updated', sessionId, conversation: conversationFor(row) })
+}
+
+// ── Live-event hooks (Task 6 layers alerts / offline queue on top) ──
+
+/** The one customer_message shape agents ever receive. */
+export function customerMessageEvent(session, message) {
+  return { type: 'customer_message', sessionId: session.id, message, conversation: conversationFor(session, message.content) }
+}
+
+hooks.onCustomerMessage = async (session, message, _isFirst) => {
+  broadcast(customerMessageEvent(session, message))
+}
+hooks.onCustomerTyping = async (sessionId) => {
+  broadcast({ type: 'customer_typing', sessionId })
+}
+
+// ── Upgrade authorization ────────────────────────────────────
 
 /**
- * Attach the agent WebSocket server to the Fastify raw HTTP server.
- * Call this once during app startup.
- *
- * @param {import('http').Server} httpServer
+ * @param {{ url?: string, headers?: object }} req
+ * @returns {{ sub: string } | null}  null = reject (fail closed)
  */
-// ── Idle session auto-close ──────────────────────────────────
+export function authorizeUpgrade(req, { secret, gatewayOrigin = process.env.GATEWAY_ORIGIN } = {}) {
+  if (!gatewayOrigin) return null
+  if (req?.headers?.origin !== gatewayOrigin) return null
+  let url
+  try { url = new URL(req.url || '', 'http://localhost') } catch { return null }
+  if (url.pathname !== AGENT_PATH) return null
+  return verifyAgentToken(url.searchParams.get('token') || '', secret)
+}
 
-export async function closeIdleSessions() {
-  try {
-    const idleMins = await getIdleMinutes()
-    const cutoff   = new Date(Date.now() - idleMins * 60_000).toISOString()
-    const { data }  = await supabase
-      .from('chat_sessions')
-      .select('id')
-      .eq('mode', 'agent')
-      .lt('last_active', cutoff)
-    if (!data?.length) return
-    for (const session of data) {
-      await setSessionMode(session.id, 'ai', { clearAgent: true })
-      pushToWidget(session.id, { type: 'mode_changed', mode: 'ai' })
-      await notifyAgentInbox({ type: 'mode_changed', sessionId: session.id, mode: 'ai', initiatedBy: 'idle_timeout' })
-    }
-  } catch (e) {
-    console.error('[agentService] closeIdleSessions:', e.message)
+// ── WebSocket server ─────────────────────────────────────────
+
+/**
+ * One heartbeat pass: terminate sockets that missed the last pong, ping the rest.
+ * @param {Iterable<{ isAlive?: boolean, ping: Function, terminate: Function }>} clients
+ */
+export function heartbeatTick(clients) {
+  for (const ws of clients) {
+    if (ws.isAlive === false) { try { ws.terminate() } catch {} continue }
+    ws.isAlive = false
+    try { ws.ping() } catch {}
   }
 }
 
-export function setupAgentWebSocket(httpServer) {
-  const wss = new WebSocketServer({ noServer: true })
+/** The clientId to echo back, or undefined when absent / not a short string. */
+function clientIdOf(cmd) {
+  const id = cmd && typeof cmd === 'object' ? cmd.clientId : undefined
+  return typeof id === 'string' && id && id.length <= MAX_CLIENT_ID ? id : undefined
+}
 
-  // Upgrade HTTP → WS only on /api/agent/ws
-  httpServer.on('upgrade', (request, socket, head) => {
-    if (request.url === '/api/agent/ws') {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request)
-      })
-    } else {
-      socket.destroy()
+/**
+ * Attach the agent WebSocket server to the raw HTTP server (call once).
+ * @param {import('http').Server} httpServer
+ * @returns {{ wss: WebSocketServer, close: () => void }}
+ */
+export function setupAgentWebSocket(httpServer, { heartbeatMs = HEARTBEAT_MS } = {}) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 })
+
+  const onUpgrade = (request, socket, head) => {
+    socket.on('error', () => {})
+    const pathname = (request.url || '').split('?')[0]
+    if (pathname !== AGENT_PATH) return socket.destroy()
+
+    const agent = authorizeUpgrade(request)
+    if (!agent) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+      return socket.destroy()
     }
-  })
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      ws.agentId = agent.sub
+      wss.emit('connection', ws, request)
+    })
+  }
+  httpServer.on('upgrade', onUpgrade)
+
+  const heartbeat = setInterval(() => heartbeatTick(wss.clients), heartbeatMs)
+  heartbeat.unref?.()
 
   wss.on('connection', (ws) => {
-    agentConnections.add(ws)
+    const unregister = registerAgentSocket(ws)
+    const reply = (obj) => { try { ws.send(JSON.stringify(obj)) } catch {} }
+    ws.isAlive = true
+    ws.on('pong', () => { ws.isAlive = true })
 
     ws.on('message', async (data) => {
+      ws.isAlive = true
+      let cmd
       try {
-        const cmd = JSON.parse(data.toString())
+        try { cmd = JSON.parse(data.toString()) } catch { throw badInput('Invalid JSON') }
+        if (cmd && cmd.type === 'ping') return reply({ type: 'pong' })
         await handleAgentCommand(cmd)
       } catch (err) {
-        ws.send(JSON.stringify({ type: 'error', message: err.message }))
+        if (!err?.expose) console.error('[agentWs] command failed:', err?.message)
+        const clientId = clientIdOf(cmd)
+        reply({ type: 'error', message: err?.expose ? err.message : 'Internal error', ...(clientId && { clientId }) })
       }
     })
 
-    ws.on('close',  () => agentConnections.delete(ws))
-    ws.on('error',  () => agentConnections.delete(ws))
+    ws.on('close', unregister)
+    ws.on('error', unregister)
 
-    // Send a welcome ping so the dashboard knows it's connected
-    ws.send(JSON.stringify({ type: 'connected', message: 'Agent inbox ready' }))
+    reply({ type: 'connected', message: 'Agent inbox ready' })
   })
-}
 
-// ── Broadcast to all connected agents ───────────────────────
-
-/**
- * Send an event to all connected agent dashboard clients.
- * @param {object} event
- */
-export async function notifyAgentInbox(event) {
-  const payload = JSON.stringify({ ...event, ts: new Date().toISOString() })
-  for (const ws of agentConnections) {
-    if (ws.readyState === 1 /* OPEN */) {
-      ws.send(payload)
+  return {
+    wss,
+    close() {
+      clearInterval(heartbeat)
+      httpServer.off('upgrade', onUpgrade)
+      for (const ws of wss.clients) { try { ws.terminate() } catch {} }
+      wss.close()
     }
   }
 }
 
-// ── Handle commands from agents ──────────────────────────────
+// ── Commands from agents ─────────────────────────────────────
+
+function badInput(message) {
+  return Object.assign(new Error(message), { expose: true })
+}
 
 /**
- * @param {{ type: string, sessionId: string, text?: string }} cmd
+ * Validate and run one agent command. Throws errors with `expose: true` for
+ * bad input (message is safe to return to the agent).
  */
-async function handleAgentCommand(cmd) {
-  const { type, sessionId, text } = cmd
+export async function handleAgentCommand(cmd, d = {}) {
+  const getSession = d.getSession || realSessions.getSession
+  const saveAgentMessage = d.saveAgentMessage || realSessions.saveAgentMessage
+  const setStatus = d.setStatus || realSessions.setStatus
+  const dispatchReply = d.dispatchReply || realDispatchReply
+  const emit = d.broadcast || broadcast
+  const push = d.pushToWidget || pushToWidget
+  const onAgentMessage = d.onAgentMessage || ((...a) => hooks.onAgentMessage(...a))
+
+  if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) throw badInput('Invalid command')
+  const { type, sessionId } = cmd
+  if (!['agent_message', 'typing', 'close', 'reopen'].includes(type)) throw badInput(`Unknown command: ${String(type).slice(0, 40)}`)
+  if (typeof sessionId !== 'string' || !sessionId) throw badInput('sessionId is required')
+  const session = await getSession(sessionId)
+  if (!session) throw badInput('Unknown session')
+
+  const updated = async () => {
+    const row = await getSession(sessionId)
+    if (row) emit({ type: 'session_updated', sessionId, conversation: toConversation(row, isOnline(sessionId)) })
+  }
 
   switch (type) {
-
-    case 'take_over':
-      await setSessionMode(sessionId, 'agent', { handoffAt: new Date().toISOString() })
-      await notifyAgentInbox({ type: 'mode_changed', sessionId, mode: 'agent', initiatedBy: 'agent' })
-      pushToWidget(sessionId, { type: 'mode_changed', mode: 'agent' })
-      break
-
-    case 'return_to_ai': {
-      const session = await setSessionMode(sessionId, 'ai', { clearAgent: true })
-      await dispatchHandoffReturn(session.channel, session.channel_user_id)
-      await notifyAgentInbox({ type: 'mode_changed', sessionId, mode: 'ai', initiatedBy: 'agent' })
-      pushToWidget(sessionId, { type: 'mode_changed', mode: 'ai' })
-      break
-    }
-
     case 'agent_message': {
-      if (!text?.trim()) throw new Error('agent_message requires text')
-
-      const session = await setSessionMode(sessionId, 'agent')
-      await dispatchReply(session.channel, session.channel_user_id, text)
-      await saveAgentMessage(sessionId, text)
-      await notifyAgentInbox({ type: 'agent_sent', sessionId, text })
-
-      // Push agent reply to any widget SSE connections on this session
-      pushToWidget(sessionId, { type: 'agent_message', text })
+      const { text } = cmd
+      if (typeof text !== 'string' || !text.trim() || text.length > MAX_TEXT) {
+        throw badInput(`text must be 1-${MAX_TEXT} characters`)
+      }
+      await dispatchReply(session.channel, session.channel_user_id, text) // no-op for widget
+      const message = await saveAgentMessage(sessionId, text)
+      try { await onAgentMessage(session, message) } catch (err) { console.error('[agentWs] onAgentMessage failed:', err?.message) }
+      const clientId = clientIdOf(cmd)
+      emit({ type: 'agent_sent', sessionId, message, ...(clientId && { clientId }) })
+      push(sessionId, { type: 'agent_message', message: { ...message, role: 'agent' } })
+      await updated()
       break
     }
-
-    case 'typing': {
-      // Agent is typing — push indicator to widget via Supabase Realtime
-      // We broadcast a lightweight event without saving to DB
-      pushToWidget(sessionId, { type: 'agent_typing', value: !!cmd.value })
+    case 'typing':
+      push(sessionId, { type: 'agent_typing', value: !!cmd.value })
       break
-    }
-
-    case 'typing': {
-      // Agent is typing — push to widget via Supabase Realtime broadcast
-      // We save a temporary marker that the widget picks up
-      pushToWidget(sessionId, { type: 'agent_typing', typing: !!text })
+    case 'close':
+    case 'reopen':
+      await setStatus(sessionId, type === 'close' ? 'closed' : 'open')
+      await updated()
       break
-    }
-
-    case 'typing': {
-      // Agent started/stopped typing — push to widget in real time
-      pushToWidget(sessionId, { type: 'agent_typing', isTyping: cmd.isTyping === true })
-      break
-    }
-
-    case 'agent_typing': {
-      // Broadcast typing indicator to widget
-      pushToWidget(sessionId, { type: 'agent_typing' })
-      break
-    }
-
-    default:
-      throw new Error(`Unknown agent command: ${type}`)
   }
 }

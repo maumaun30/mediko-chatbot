@@ -2,50 +2,54 @@
  * settingsService.js
  * Reads/writes settings from the chat_settings table.
  */
-import { supabase } from '../db/supabase.js'
+import { query, queryOne } from '../db/mysql.js'
+import { isOpenAt, nextOpenAt } from './hours.js'
+
+export { isOpenAt, nextOpenAt }
 
 const cache = {}
 const TTL   = 60_000
 
 async function getSetting(key) {
   if (cache[key] && Date.now() - cache[key].ts < TTL) return cache[key].val
-  const { data, error } = await supabase
-    .from('chat_settings').select('value').eq('key', key).single()
-  if (error) return null
-  cache[key] = { val: data.value, ts: Date.now() }
-  return data.value
+  const row = await queryOne('SELECT value FROM chat_settings WHERE `key` = ?', [key])
+  if (!row) return null
+  // mysql2 parses JSON columns into JS objects automatically.
+  const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value
+  cache[key] = { val, ts: Date.now() }
+  return val
 }
 
 async function setSetting(key, value) {
-  const { error } = await supabase
-    .from('chat_settings')
-    .upsert({ key, value, updated_at: new Date().toISOString() })
-  if (error) throw new Error(error.message)
+  await query(
+    `INSERT INTO chat_settings (\`key\`, value, updated_at)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)`,
+    [key, JSON.stringify(value), new Date()]
+  )
   cache[key] = { val: value, ts: Date.now() }
 }
 
 export async function getBusinessHours()    { return await getSetting('business_hours') }
 export async function saveBusinessHours(v)  { return await setSetting('business_hours', v) }
-export async function getIdleMinutes()      { const s = await getSetting('idle_minutes'); return s?.value ?? 30 }
-export async function saveIdleMinutes(mins) { return await setSetting('idle_minutes', { value: mins }) }
 
 export async function isWithinBusinessHours() {
-  const bh = await getBusinessHours()
-  if (!bh?.enabled) return true
-  const tz    = bh.timezone || 'Asia/Manila'
-  const now   = new Date()
-  const local = new Date(now.toLocaleString('en-US', { timeZone: tz }))
-  const days  = ['sun','mon','tue','wed','thu','fri','sat']
-  const day   = days[local.getDay()]
-  const h     = bh.hours?.[day]
-  if (!h?.open) return false
-  const [sh, sm] = h.start.split(':').map(Number)
-  const [eh, em] = h.end.split(':').map(Number)
-  const cur = local.getHours() * 60 + local.getMinutes()
-  return cur >= sh * 60 + sm && cur < eh * 60 + em
+  return isOpenAt(await getBusinessHours(), new Date())
 }
+
+/** Minutes a customer message may sit unanswered before an alert. Default 10 (row may be absent). */
+export async function getUnansweredMinutes() {
+  const s = await getSetting('unanswered_minutes')
+  return s?.value ?? 10
+}
+export async function saveUnansweredMinutes(n) { return await setSetting('unanswered_minutes', { value: n }) }
 
 export async function getAwayMessage() {
   const bh = await getBusinessHours()
   return bh?.awayMessage || 'Pasensya na po, wala kaming available na agent sa ngayon. Subukan ulit mamaya.'
+}
+
+/** AI replies are on only when AI_ENABLED is exactly the string 'true'. */
+export function aiEnabled() {
+  return process.env.AI_ENABLED === 'true'
 }

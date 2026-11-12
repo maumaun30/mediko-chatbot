@@ -67,7 +67,7 @@ export async function dispatchHandoffAck(channel, channelUserId) {
  */
 export async function dispatchHandoffReturn(channel, channelUserId) {
   const text =
-    'Naibalik na po kayo sa aming AI assistant na si Medi. ' +
+    'Naibalik na po kayo sa aming Mediko Assistant. ' +
     'Paano ko pa kayo matutulungan?'
 
   if (channel !== 'widget') {

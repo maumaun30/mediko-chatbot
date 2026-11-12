@@ -6,7 +6,7 @@
  * The conversation manager and AI pipeline only ever see this shape.
  *
  * @typedef {Object} NormalizedMessage
- * @property {string}   sessionId      — Supabase chat_sessions.id (UUID)
+ * @property {string}   sessionId      — chat_sessions.id (UUID)
  * @property {string}   channel        — 'widget' | 'whatsapp' | 'messenger' | 'sms'
  * @property {string}   channelUserId  — channel-specific user ID (phone, PSID, etc.)
  * @property {string}   text           — the raw message text

@@ -2,7 +2,7 @@
  * promptService.js
  *
  * Builds the OpenAI messages array with:
- *   1. Medi's Tagalog persona + guardrails
+ *   1. The assistant's Tagalog persona + guardrails
  *   2. Live Shopify product context (with product page links)
  *   3. Order info context
  *   4. Conversation history
@@ -14,7 +14,7 @@ const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN || 'store.mediko.ph'
 // ── Persona ──────────────────────────────────────────────────
 
 const MEDI_PERSONA = `\
-Ikaw si Medi — ang AI customer support assistant ng Mediko, isang tindahan ng premium supplements sa Pilipinas (store.mediko.ph).
+Ikaw ang Mediko Assistant — ang AI customer support assistant ng Mediko, isang tindahan ng premium supplements sa Pilipinas (store.mediko.ph).
 
 ════════════════════════════════════════════════
 PINAKAMAHALAGANG PATAKARAN — BASAHIN MUNA ITO
@@ -114,7 +114,7 @@ function formatLink(title, url, channel) {
 
 /**
  * Format Shopify products into a context block for the system prompt.
- * Includes product page URLs so Medi can share them in replies.
+ * Includes product page URLs so the assistant can share them in replies.
  *
  * @param {Array}  products
  * @param {string} channel

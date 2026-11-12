@@ -38,6 +38,7 @@ const PRODUCT_SEARCH_QUERY = `
           handle
           description
           tags
+          featuredImage { url altText }
           priceRange {
             minVariantPrice { amount currencyCode }
             maxVariantPrice { amount currencyCode }
@@ -108,6 +109,7 @@ export async function searchProducts(query, limit = 4) {
     handle:      node.handle,
     description: node.description?.slice(0, 350) || '',
     tags:        node.tags || [],
+    image:       node.featuredImage?.url || null,
     minPrice:    node.priceRange.minVariantPrice,
     maxPrice:    node.priceRange.maxVariantPrice,
     variants:    (node.variants?.edges || []).map(({ node: v }) => ({
@@ -119,7 +121,71 @@ export async function searchProducts(query, limit = 4) {
   }))
 }
 
-// ── Keyword extraction (dynamic, loaded from Supabase) ────────
+// ── Product lookup by handle (for widget card thumbnails) ─────
+
+const handleCache = new Map()   // handle → { data, ts }
+const HANDLE_TTL  = 10 * 60 * 1000
+
+// Exact lookup by handle — `products(query: "handle:...")` is a fuzzy full-text
+// search and returns the wrong product, so we use the dedicated product() field.
+const PRODUCT_BY_HANDLE_QUERY = `
+  query productByHandle($handle: String!) {
+    product(handle: $handle) {
+      id
+      title
+      handle
+      featuredImage { url altText }
+      priceRange { minVariantPrice { amount currencyCode } }
+    }
+  }
+`
+
+/**
+ * Resolve a single product by its handle — used by the widget to render a
+ * real thumbnail + price on each product card. Cached for 10 min.
+ *
+ * @param {string} handle
+ * @returns {Promise<{ title, handle, image, price, currency, url }|null>}
+ */
+export async function getProductByHandle(handle) {
+  if (!handle) return null
+  if (!STORE_DOMAIN || !STOREFRONT_TOKEN) return null
+
+  const cached = handleCache.get(handle)
+  if (cached && Date.now() - cached.ts < HANDLE_TTL) return cached.data
+
+  try {
+    const res = await fetch(STOREFRONT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type':                      'application/json',
+        'X-Shopify-Storefront-Access-Token': STOREFRONT_TOKEN
+      },
+      body: JSON.stringify({ query: PRODUCT_BY_HANDLE_QUERY, variables: { handle } })
+    })
+    if (!res.ok) throw new Error(`Shopify Storefront API ${res.status}`)
+
+    const json = await res.json()
+    const node = json.data?.product
+    if (!node) { handleCache.set(handle, { data: null, ts: Date.now() }); return null }
+
+    const data = {
+      title:    node.title,
+      handle:   node.handle,
+      image:    node.featuredImage?.url || null,
+      price:    node.priceRange?.minVariantPrice?.amount ?? null,
+      currency: node.priceRange?.minVariantPrice?.currencyCode ?? 'PHP',
+      url:      `https://${STORE_DOMAIN}/products/${node.handle}`
+    }
+    handleCache.set(handle, { data, ts: Date.now() })
+    return data
+  } catch (err) {
+    console.error('[shopifyService] getProductByHandle failed:', err.message)
+    return null
+  }
+}
+
+// ── Keyword extraction (dynamic, loaded from MySQL) ──────────
 
 /**
  * Stopwords to ignore when doing product name search.
@@ -139,7 +205,7 @@ const STOPWORDS = new Set([
 
 /**
  * Extract Shopify search terms from a customer message.
- * Loads keyword patterns from Supabase (cached for 5 min).
+ * Loads keyword patterns from MySQL (cached for 5 min).
  *
  * Returns an array of deduplicated search term strings.
  *
@@ -241,7 +307,12 @@ export async function getProductContextForMessage(message) {
 
 // ── Order lookup ──────────────────────────────────────────────
 
+// Order tracking needs an Admin API token with the read_orders scope.
+// If you only have a Storefront token (products/content), leave this off.
+const ORDERS_ENABLED = process.env.SHOPIFY_ORDERS_ENABLED === 'true'
+
 export async function lookupOrder(orderName, customerEmail) {
+  if (!ORDERS_ENABLED) return null   // order tracking disabled (no read_orders scope)
   if (!STORE_DOMAIN || !ADMIN_TOKEN) {
     console.warn('[Shopify] Admin token not configured')
     return null

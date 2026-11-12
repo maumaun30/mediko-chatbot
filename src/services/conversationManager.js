@@ -24,11 +24,13 @@ import {
   setSessionMode,
   touchSession,
   loadHistory,
-  saveMessagePair
+  recordCustomerMessage,
+  getSession
 } from './sessionService.js'
 import { dispatchHandoffAck, dispatchHandoffReturn } from './responseDispatcher.js'
-import { isWithinBusinessHours, getAwayMessage } from './settingsService.js'
-import { notifyAgentInbox } from './agentService.js'
+import { aiEnabled } from './settingsService.js'
+import './agentService.js' // installs the live-event hooks
+import { hooks } from './chatEvents.js'
 import {
   getProductContextForMessage,
   lookupOrder,
@@ -107,6 +109,8 @@ export function isReturnToAiRequest(text) {
 // ── Main decision function ───────────────────────────────────
 
 export async function processMessage(msg) {
+  if (!aiEnabled()) throw new Error('processMessage: AI is off')
+
   const { sessionId, channel, channelUserId, text } = msg
 
   const valid = await sessionExists(sessionId)
@@ -122,7 +126,6 @@ export async function processMessage(msg) {
   if (currentMode === 'agent' && isReturnToAiRequest(text)) {
     await setSessionMode(sessionId, 'ai', { clearAgent: true })
     await dispatchHandoffReturn(channel, channelUserId)
-    await notifyAgentInbox({ type: 'mode_changed', sessionId, mode: 'ai' })
     return { type: 'handoff_returned', sessionId, channel, channelUserId, text, mode: 'ai' }
   }
 
@@ -130,14 +133,14 @@ export async function processMessage(msg) {
   if (currentMode === 'ai' && isHandoffRequest(text)) {
     await setSessionMode(sessionId, 'agent', { handoffAt: new Date().toISOString() })
     await dispatchHandoffAck(channel, channelUserId)
-    await notifyAgentInbox({ type: 'handoff_requested', sessionId, channel, channelUserId, text })
     return { type: 'handoff_requested', sessionId, channel, channelUserId, text, mode: 'agent' }
   }
 
   // Agent mode — forward to inbox
   if (currentMode === 'agent') {
-    await notifyAgentInbox({ type: 'customer_message', sessionId, channel, channelUserId, text })
-    await saveMessagePair(sessionId, text, null)
+    const { message, isFirst } = await recordCustomerMessage(sessionId, text)
+    const session = await getSession(sessionId)
+    try { await hooks.onCustomerMessage(session, message, isFirst) } catch (err) { console.error('[conversationManager] onCustomerMessage failed:', err?.message) }
     return { type: 'agent', sessionId, channel, channelUserId, text, mode: 'agent' }
   }
 

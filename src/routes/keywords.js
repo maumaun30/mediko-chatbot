@@ -2,7 +2,7 @@
  * keywords.js
  *
  * CRUD REST API for chat keywords.
- * Protected by the same ADMIN_SECRET as the dashboard.
+ * Protected by the agent gateway JWT (requireAgent).
  * Registered at /api/keywords
  */
 
@@ -13,21 +13,10 @@ import {
   deleteKeyword
 } from '../services/keywordService.js'
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET
-
-function requireAuth(request, reply, done) {
-  if (!ADMIN_SECRET) return done()
-  const token = request.headers['x-admin-secret'] ?? request.query.secret
-  if (token !== ADMIN_SECRET) {
-    reply.status(401).send({ error: 'Unauthorized' })
-    return
-  }
-  done()
-}
 
 export default async function keywordRoutes(fastify) {
 
-  fastify.addHook('onRequest', requireAuth)
+  fastify.addHook('onRequest', fastify.requireAgent)
 
   /** GET /api/keywords — list all keywords */
   fastify.get('/', async (request, reply) => {
