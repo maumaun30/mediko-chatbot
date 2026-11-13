@@ -22,7 +22,7 @@ export default fp(async function plugins(fastify) {
     origin: (origin, callback) => {
       // No Origin header = server-to-server / same-origin; otherwise must be allow-listed.
       if (!origin || corsOriginFor(origin)) callback(null, true)
-      else callback(new Error(`CORS: origin ${origin} not allowed`), false)
+      else callback(null, false)   // refuse without CORS headers (not a 500)
     },
     methods:        ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

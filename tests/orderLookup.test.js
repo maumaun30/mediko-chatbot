@@ -59,3 +59,21 @@ test('POST /api/chat/order-status validates, limits per order and hides not-foun
   assert.equal((await post({ order: '#1042', contact: '09171234567' })).statusCode, 429)
   await app.close()
 })
+
+test('POST /api/chat/typing ignores unknown sessions (no agent broadcast)', async () => {
+  const { default: Fastify } = await import('fastify')
+  const { default: chatRoutes } = await import('../src/routes/chat.js')
+  const { hooks } = await import('../src/services/chatEvents.js')
+  const seen = []
+  const prev = hooks.onCustomerTyping
+  hooks.onCustomerTyping = async (id) => { seen.push(id) }
+  const app = Fastify()
+  await app.register(chatRoutes, { prefix: '/api/chat', sessionExists: async (id) => id === '11111111-1111-4111-8111-111111111111' })
+  await app.ready()
+  const post = (sessionId) => app.inject({ method: 'POST', url: '/api/chat/typing', payload: { sessionId } })
+  assert.equal((await post('22222222-2222-4222-8222-222222222222')).statusCode, 204)
+  assert.equal((await post('11111111-1111-4111-8111-111111111111')).statusCode, 204)
+  assert.deepEqual(seen, ['11111111-1111-4111-8111-111111111111'])
+  hooks.onCustomerTyping = prev
+  await app.close()
+})

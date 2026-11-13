@@ -8,7 +8,8 @@ const SESSION_COLUMNS = [
   ['last_agent_at',       'DATETIME(3) NULL'],
   ['alerted_at',          'DATETIME(3) NULL'],
   ['customer_emailed_at', 'DATETIME(3) NULL'],
-  ['agent_seen_at',       'DATETIME(3) NULL']
+  ['agent_seen_at',       'DATETIME(3) NULL'],
+  ['customer_seen_at',    'DATETIME(3) NULL']   // widget went offline: replies before this were seen live
 ]
 
 async function ensureColumn({ query, queryOne }, table, column, ddl) {

@@ -36,3 +36,13 @@ test('messageFromRow lifts meta.hidePreview (customer removed the link card)', (
   assert.equal(messageFromRow({ id: 1, role: 'user', content: 'x', created_at: 't', meta: { hidePreview: true } }).hidePreview, true)
   assert.equal(messageFromRow({ id: 2, role: 'user', content: 'x', created_at: 't', meta: null }).hidePreview, false)
 })
+
+test('agentMessagesToEmail: latest 20 only, after the customer last saw the chat', async () => {
+  const { agentMessagesToEmail } = await import('../src/services/sessionService.js')
+  let sql = ''
+  const out = await agentMessagesToEmail('s', { run: async (q) => { sql = q.replace(/\s+/g, ' '); return [{ content: 'a' }, { content: 'b' }] } })
+  assert.deepEqual(out, ['a', 'b'])
+  assert.match(sql, /customer_seen_at/)
+  assert.match(sql, /ORDER BY m\.seq DESC LIMIT 20/)
+  assert.match(sql, /ORDER BY latest\.seq ASC/)
+})

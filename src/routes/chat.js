@@ -1,6 +1,6 @@
-import { createSession, sessionExists, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession } from '../services/sessionService.js'
+import { createSession, sessionExists, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession, markCustomerSeen } from '../services/sessionService.js'
 import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
-import { publicSchedule } from '../services/hours.js'
+import { publicSchedule, isOpenAt } from '../services/hours.js'
 import { lookupOrderStatus, createAttemptLimiter } from '../services/orderLookup.js'
 import { normalizePhMobile } from '../services/phone.js'
 import { verifyChatLink } from '../services/agentAuth.js'
@@ -94,9 +94,11 @@ export default async function chatRoutes(fastify, opts = {}) {
 
   // GET /api/chat/config - public widget config
   fastify.get('/config', async (_request, reply) => {
+    // One snapshot of the hours, so online and nextOpenAt can't disagree.
     const bh     = await getBusinessHours()
-    const online = await isWithinBusinessHours()
-    const next   = online ? null : nextOpenAt(bh, new Date())
+    const now    = new Date()
+    const online = isOpenAt(bh, now)
+    const next   = online ? null : nextOpenAt(bh, now)
     return reply.send({
       aiEnabled:   aiEnabled(),
       online,
@@ -143,7 +145,7 @@ export default async function chatRoutes(fastify, opts = {}) {
     const { message: saved, isFirst } = await recordCustomerMessage(sessionId, message, { hidePreview })
     try {
       const session = await getSession(sessionId)
-      await hooks.onCustomerMessage(session, saved, isFirst)
+      if (session) await hooks.onCustomerMessage(session, saved, isFirst)
     } catch (err) {
       fastify.log.error({ err: err.message, sessionId: maskId(sessionId) }, 'onCustomerMessage hook failed')
     }
@@ -182,7 +184,10 @@ export default async function chatRoutes(fastify, opts = {}) {
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
   }, async (request, reply) => {
     try {
-      await hooks.onCustomerTyping(request.body.sessionId)
+      // Only real sessions reach the agents' screens.
+      if (await (opts.sessionExists || sessionExists)(request.body.sessionId)) {
+        await hooks.onCustomerTyping(request.body.sessionId)
+      }
     } catch (err) {
       fastify.log.error({ err: err.message }, 'onCustomerTyping hook failed')
     }
@@ -376,7 +381,12 @@ export default async function chatRoutes(fastify, opts = {}) {
 
     function cleanup() {
       clearInterval(ping)
-      if (unsubscribeWidget(sessionId, raw)) announce()
+      if (unsubscribeWidget(sessionId, raw)) {
+        // Widget went offline: replies sent up to now were seen live, so the
+        // offline email won't repeat them.
+        markCustomerSeen(sessionId).catch(() => {})
+        announce()
+      }
       try { raw.end() } catch {}
     }
 
