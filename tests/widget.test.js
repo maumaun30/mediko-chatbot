@@ -176,3 +176,16 @@ test('trackStateLabel: English labels for each state', async () => {
   assert.equal(trackStateLabel('processing'), 'Being prepared')
   assert.equal(trackStateLabel('weird'), 'Being prepared')
 })
+
+test('ordersFromProxy keeps safe order rows only', async () => {
+  const { ordersFromProxy } = await import('../../mediko-widget/src/track.js')
+  const out = ordersFromProxy({ loggedIn: true, orders: [
+    { order: '#1002', state: 'shipped', placedAt: '2026-11-01T00:00:00Z', shippedAt: null, carrier: 'J&T', trackingNumber: 'JT1', trackingUrl: 'javascript:1' },
+    { nope: true }
+  ] })
+  assert.equal(out.loggedIn, true)
+  assert.equal(out.orders.length, 1)
+  assert.equal(out.orders[0].trackingUrl, null)
+  assert.deepEqual(ordersFromProxy(null), { loggedIn: false, orders: [] })
+  assert.deepEqual(ordersFromProxy({ loggedIn: false }), { loggedIn: false, orders: [] })
+})
