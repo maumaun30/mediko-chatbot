@@ -78,6 +78,7 @@ for CloudPanel/VPS deployment.
 | `GET`  | `/health` | Health check |
 | `GET`  | `/api/chat/config` | `{ aiEnabled, online, nextOpenAt, awayMessage, schedule }`. `schedule` is `{ timezone, days: [{ day, open, start, end }] }` Mon→Sun, or null when office hours are off |
 | `POST` | `/api/chat/session` | Create a session. Body: `customerName`, `customerEmail`, `customerPhone` (PH mobile `09XXXXXXXXX` / `+639XXXXXXXXX`, stored as `639XXXXXXXXX`), optional `metadata`. Returns `201 { sessionId }` |
+| `POST` | `/api/chat/order-status` | "Track my order" `{ order, contact }` (order number + the email or PH mobile used on the order). 5/min per IP and 10/hour per order number. Relayed to Gateway `POST /internal/order-status` (signed like chat events); answers `{ found: true, status: { order, state, placedAt, shippedAt, carrier, trackingNumber, trackingUrl } }` only when the contact matches, otherwise `{ found: false }` (same for a missing order). 503 when Gateway is unreachable |
 | `POST` | `/api/chat/message` | Customer message (1-2000 chars, 15/min). Optional `hidePreview: true` when the customer removed the link card (stored in `meta`, returned as `message.hidePreview`; Gateway then shows no card either). Returns `{ message, away }` |
 | `POST` | `/api/chat/typing` | Customer typing signal, `204` |
 | `GET`  | `/api/chat/resume?t=<token>` | Exchange a signed email link token for `{ sessionId }`; `410 { error: 'expired' }` if invalid/expired |

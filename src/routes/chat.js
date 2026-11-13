@@ -1,6 +1,7 @@
 import { createSession, sessionExists, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession } from '../services/sessionService.js'
 import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
 import { publicSchedule } from '../services/hours.js'
+import { lookupOrderStatus, createAttemptLimiter } from '../services/orderLookup.js'
 import { normalizePhMobile } from '../services/phone.js'
 import { verifyChatLink } from '../services/agentAuth.js'
 import { corsOriginFor } from '../plugins/security.js'
@@ -54,6 +55,17 @@ const messageSchema = {
   }
 }
 
+const orderStatusSchema = {
+  body: {
+    type: 'object',
+    required: ['order', 'contact'],
+    properties: {
+      order:   { type: 'string', minLength: 1, maxLength: 30 },
+      contact: { type: 'string', minLength: 3, maxLength: 254 }
+    }
+  }
+}
+
 const typingSchema = {
   body: {
     type: 'object',
@@ -78,7 +90,7 @@ const historySchema = {
   querystring: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 } } }
 }
 
-export default async function chatRoutes(fastify) {
+export default async function chatRoutes(fastify, opts = {}) {
 
   // GET /api/chat/config - public widget config
   fastify.get('/config', async (_request, reply) => {
@@ -140,6 +152,29 @@ export default async function chatRoutes(fastify) {
     return reply.send({ message: saved, away: online ? null : await getAwayMessage() })
   })
 
+
+  // POST /api/chat/order-status - "Track my order" (no chat session needed).
+  // Relayed to Gateway, which answers only when the email/mobile matches the
+  // order; a missing order and a wrong contact look the same.
+  const orderAttempts = opts.orderAttempts || createAttemptLimiter({ max: 10, windowMs: 60 * 60 * 1000 })
+  const orderLookup = opts.lookupOrderStatus || lookupOrderStatus
+  fastify.post('/order-status', {
+    schema: orderStatusSchema,
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const m = /^\s*(?:order\s*)?(?:no\.?\s*)?#?\s*(\d{3,10})\s*$/i.exec(request.body.order)
+    if (!m) return reply.status(400).send({ error: 'Please enter a valid order number.' })
+    const contact = request.body.contact.trim()
+    if (!contact.includes('@') && !normalizePhMobile(contact)) {
+      return reply.status(400).send({ error: 'Please enter the email or mobile number used for the order.' })
+    }
+    if (!orderAttempts.hit(m[1])) {
+      return reply.status(429).send({ error: 'Too many attempts for this order. Please try again later.' })
+    }
+    const res = await orderLookup({ order: m[1], contact })
+    if (!res.ok) return reply.status(503).send({ error: 'Order tracking isn’t available right now. Please try again later.' })
+    return reply.send(res.found ? { found: true, status: res.status } : { found: false })
+  })
 
   // POST /api/chat/typing - own bucket so typing never drains the global limit
   fastify.post('/typing', {

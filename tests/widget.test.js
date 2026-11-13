@@ -157,3 +157,22 @@ test('formatSchedule groups consecutive days with the same hours', async () => {
   ])
   assert.deepEqual(formatSchedule(null), [])
 })
+
+test('validateTrack: order number and email/mobile required', async () => {
+  const { validateTrack } = await import('../../mediko-widget/src/track.js')
+  assert.deepEqual(validateTrack({ order: '#1042', contact: '0917 123 4567' }), { ok: true, value: { order: '#1042', contact: '0917 123 4567' } })
+  assert.deepEqual(validateTrack({ order: 'maria@x.ph', contact: '' }).errors, {
+    order: 'Please enter your order number (e.g. #1042).',
+    contact: 'Please enter the email or mobile number used for the order.'
+  })
+  assert.equal(validateTrack({ order: '1042', contact: 'x' }).ok, false)
+})
+
+test('trackStateLabel: English labels for each state', async () => {
+  const { trackStateLabel } = await import('../../mediko-widget/src/track.js')
+  assert.equal(trackStateLabel('shipped'), 'Shipped')
+  assert.equal(trackStateLabel('partially_shipped'), 'Partially shipped')
+  assert.equal(trackStateLabel('cancelled'), 'Cancelled')
+  assert.equal(trackStateLabel('processing'), 'Being prepared')
+  assert.equal(trackStateLabel('weird'), 'Being prepared')
+})
