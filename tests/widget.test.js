@@ -189,3 +189,10 @@ test('ordersFromProxy keeps safe order rows only', async () => {
   assert.deepEqual(ordersFromProxy(null), { loggedIn: false, orders: [] })
   assert.deepEqual(ordersFromProxy({ loggedIn: false }), { loggedIn: false, orders: [] })
 })
+
+test('delivered state: label and deliveredAt kept from the proxy', async () => {
+  const { trackStateLabel, ordersFromProxy } = await import('../../mediko-widget/src/track.js')
+  assert.equal(trackStateLabel('delivered'), 'Delivered')
+  const out = ordersFromProxy({ loggedIn: true, orders: [{ order: '#1', state: 'delivered', deliveredAt: '2026-11-12T05:00:00Z' }] })
+  assert.equal(out.orders[0].deliveredAt, '2026-11-12T05:00:00Z')
+})
