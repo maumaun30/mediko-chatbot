@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
   alerted_at          DATETIME(3)  NULL,
   customer_emailed_at DATETIME(3)  NULL,
   agent_seen_at   DATETIME(3)   NULL,
+  customer_seen_at DATETIME(3)  NULL,
   INDEX idx_sessions_mode         (mode, last_active),
   INDEX idx_sessions_status       (status, last_customer_at),
   INDEX idx_sessions_channel_user (channel, channel_user_id)

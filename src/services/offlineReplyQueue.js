@@ -7,6 +7,7 @@ import * as sessions from './sessionService.js'
 import { signChatLink as realSign } from './agentAuth.js'
 import { postChatEvent as realPost } from './gatewayNotifier.js'
 import { maskId } from './redact.js'
+import { createAttemptLimiter } from './orderLookup.js'
 
 export function createOfflineReplyQueue({
   delayMs = 120_000, isOnline, send, setTimer = setTimeout, clearTimer = clearTimeout, log = console.error
@@ -52,6 +53,10 @@ export function createOfflineSender(d = {}) {
       return
     }
     const base = d.chatCustomerUrl ?? process.env.CHAT_CUSTOMER_URL ?? ''
+    if (!base) {
+      log('[offlineQueue] CHAT_CUSTOMER_URL not set, skipping email (the link would be broken)')
+      return
+    }
     const link = `${base}${base.includes('?') ? '&' : '?'}mdk_chat=${token}`
     const ok = await post('offline_reply', { sessionId, name: s.customer_name ?? null, email: s.customer_email, messages, link })
     if (ok) await markEmailed(sessionId, now())
@@ -72,10 +77,17 @@ export function installNotificationHooks(hooks, d = {}) {
   const queue = d.queue
   const prevCustomer = hooks.onCustomerMessage
   const prevAgent = hooks.onAgentMessage
+  // New-chat staff emails per hour, so scripted sessions can't flood the inbox
+  // or burn the Brevo quota. Chats over the cap still show up in Gateway.
+  const alertCap = d.alertCap || createAttemptLimiter({ max: 30, windowMs: 60 * 60 * 1000 })
 
   hooks.onCustomerMessage = async (session, message, isFirst) => {
-    await prevCustomer(session, message, isFirst)
+    try { await prevCustomer(session, message, isFirst) } catch (err) { log(`[agentWs] broadcast failed: ${err?.message}`) }
     if (!isFirst) return
+    if (!alertCap.hit('new_conversation')) {
+      log('[alerts] new_conversation email skipped: hourly cap reached')
+      return
+    }
     try {
       const ok = await post('new_conversation', {
         sessionId: session.id, name: session.customer_name ?? null, email: session.customer_email ?? null,
@@ -88,7 +100,7 @@ export function installNotificationHooks(hooks, d = {}) {
   }
 
   hooks.onAgentMessage = async (session, message) => {
-    await prevAgent(session, message)
+    try { await prevAgent(session, message) } catch (err) { log(`[agentWs] onAgentMessage failed: ${err?.message}`) }
     try {
       if (!isOnline(session.id)) queue.enqueue(session.id)
     } catch (err) {

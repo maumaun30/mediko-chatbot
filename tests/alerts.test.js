@@ -191,3 +191,30 @@ test('offline sender skips: no email, no messages, signChatLink throws, post fai
     if (over.postChatEvent === undefined) assert.equal(c.posts.length, 0)
   }
 })
+
+test('hooks: a failing broadcast still sends the new-chat alert', async () => {
+  const calls = { posts: [] }
+  const hooks = { onCustomerMessage: async () => { throw new Error('ws down') }, onAgentMessage: async () => { throw new Error('ws') }, onCustomerTyping: async () => {} }
+  const queue = { enqueue: () => { calls.enq = true }, size: () => 0 }
+  installNotificationHooks(hooks, { isOnline: () => false, queue, log: () => {}, now: () => t('02:00:00'),
+    postChatEvent: async (type) => { calls.posts.push(type); return true }, markAlerted: async () => {} })
+  await hooks.onCustomerMessage(sess, { content: 'hi' }, true)
+  await hooks.onAgentMessage(sess, { content: 'r' })
+  assert.deepEqual(calls.posts, ['new_conversation'])
+  assert.equal(calls.enq, true)
+})
+
+test('hooks: new-chat staff emails are capped (flood guard)', async () => {
+  const { createAttemptLimiter } = await import('../src/services/orderLookup.js')
+  const { hooks, calls } = harness({ alertCap: createAttemptLimiter({ max: 2, windowMs: 60_000 }) })
+  for (let i = 0; i < 4; i++) await hooks.onCustomerMessage({ ...sess, id: `s${i}` }, { content: 'x' }, true)
+  assert.equal(calls.posts.length, 2)
+})
+
+test('offline sender skips when CHAT_CUSTOMER_URL is not set (no broken links)', async () => {
+  const saved = process.env.CHAT_CUSTOMER_URL; delete process.env.CHAT_CUSTOMER_URL
+  const { c, deps } = senderDeps({ chatCustomerUrl: undefined })
+  await createOfflineSender(deps)('s1')
+  assert.equal(c.posts.length, 0)
+  if (saved !== undefined) process.env.CHAT_CUSTOMER_URL = saved
+})

@@ -303,17 +303,32 @@ export async function markAlerted(id, at) {
   await query('UPDATE chat_sessions SET alerted_at = ? WHERE id = ?', [at, id])
 }
 
-/** Agent replies written after the later of the customer's last message and the last email. */
-export async function agentMessagesToEmail(sessionId) {
-  const rows = await query(
-    `SELECT m.content FROM chat_messages m
-     JOIN chat_sessions s ON s.id = m.session_id
-     WHERE m.session_id = ? AND m.role = 'agent'
-       AND m.created_at > GREATEST(COALESCE(s.last_customer_at, '1970-01-01 00:00:00'), COALESCE(s.customer_emailed_at, '1970-01-01 00:00:00'))
-     ORDER BY m.seq ASC`,
+/**
+ * Agent replies the customer hasn't seen: written after their last message, the
+ * last offline email and the moment their widget last went offline (replies
+ * before that were delivered live). Latest 20, oldest first (Gateway caps at 50).
+ */
+export async function agentMessagesToEmail(sessionId, { run = query } = {}) {
+  const rows = await run(
+    `SELECT content FROM (
+       SELECT m.content, m.seq FROM chat_messages m
+       JOIN chat_sessions s ON s.id = m.session_id
+       WHERE m.session_id = ? AND m.role = 'agent'
+         AND m.created_at > GREATEST(
+           COALESCE(s.last_customer_at, '1970-01-01 00:00:00'),
+           COALESCE(s.customer_emailed_at, '1970-01-01 00:00:00'),
+           COALESCE(s.customer_seen_at, '1970-01-01 00:00:00'))
+       ORDER BY m.seq DESC LIMIT 20
+     ) AS latest
+     ORDER BY latest.seq ASC`,
     [sessionId]
   )
   return rows.map(r => r.content)
+}
+
+/** The customer's widget just went offline: everything before now was seen live. */
+export async function markCustomerSeen(sessionId, at = new Date()) {
+  await query('UPDATE chat_sessions SET customer_seen_at = ? WHERE id = ?', [at, sessionId])
 }
 
 export async function markEmailed(id, at) {
