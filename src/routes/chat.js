@@ -1,5 +1,5 @@
 import { createSession, sessionExists, loadHistory, saveMessagePair, getFullHistory, recordCustomerMessage, getSession, markCustomerSeen } from '../services/sessionService.js'
-import { isWithinBusinessHours, getBusinessHours, getAwayMessage, aiEnabled, nextOpenAt } from '../services/settingsService.js'
+import { isWithinBusinessHours, getBusinessHours, getAwayMessage, getWidgetTexts, aiEnabled, nextOpenAt } from '../services/settingsService.js'
 import { publicSchedule, isOpenAt } from '../services/hours.js'
 import { lookupOrderStatus, createAttemptLimiter } from '../services/orderLookup.js'
 import { normalizePhMobile } from '../services/phone.js'
@@ -104,6 +104,7 @@ export default async function chatRoutes(fastify, opts = {}) {
       online,
       nextOpenAt:  next ? next.toISOString() : null,
       awayMessage: await getAwayMessage(),
+      texts:       await getWidgetTexts(),
       schedule:    publicSchedule(bh)
     })
   })
