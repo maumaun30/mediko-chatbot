@@ -23,6 +23,10 @@ const settingsSchema = {
     type: 'object', additionalProperties: false,
     properties: {
       unansweredMinutes: { type: 'integer', minimum: 1, maximum: 240 },
+      widgetTexts: {
+        type: 'object', additionalProperties: false,
+        properties: { bubble: { type: 'string', maxLength: 200 }, greeting: { type: 'string', maxLength: 300 } }
+      },
       businessHours: {
         type: 'object', additionalProperties: false,
         properties: {
@@ -67,7 +71,8 @@ export default async function agentRoutes(fastify, opts = {}) {
   async function currentSettings() {
     return {
       businessHours: await settings.getBusinessHours(),
-      unansweredMinutes: await settings.getUnansweredMinutes()
+      unansweredMinutes: await settings.getUnansweredMinutes(),
+      widgetTexts: await settings.getWidgetTexts()
     }
   }
 
@@ -80,12 +85,13 @@ export default async function agentRoutes(fastify, opts = {}) {
   fastify.get('/settings', async () => currentSettings())
 
   fastify.put('/settings', { schema: settingsSchema }, async (request) => {
-    const { businessHours, unansweredMinutes } = request.body || {}
+    const { businessHours, unansweredMinutes, widgetTexts } = request.body || {}
     if (businessHours !== undefined) {
       const cur = (await settings.getBusinessHours()) || {}
       await settings.saveBusinessHours({ ...cur, ...businessHours, hours: { ...cur.hours, ...businessHours.hours } })
     }
     if (unansweredMinutes !== undefined) await settings.saveUnansweredMinutes(unansweredMinutes)
+    if (widgetTexts !== undefined) await settings.saveWidgetTexts({ ...(await settings.getWidgetTexts()), ...widgetTexts })
     return currentSettings()
   })
 }

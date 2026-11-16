@@ -196,3 +196,11 @@ test('delivered state: label and deliveredAt kept from the proxy', async () => {
   const out = ordersFromProxy({ loggedIn: true, orders: [{ order: '#1', state: 'delivered', deliveredAt: '2026-11-12T05:00:00Z' }] })
   assert.equal(out.orders[0].deliveredAt, '2026-11-12T05:00:00Z')
 })
+
+test('textsFromConfig: saved texts win, blank or missing falls back to Tagalog', async () => {
+  const { textsFromConfig } = await import('../../mediko-widget/src/texts.js')
+  const def = 'Kumusta po! Paano ko kayo matutulungan ngayon? 😊'
+  assert.deepEqual(textsFromConfig({ texts: { bubble: ' Hi! ', greeting: 'Hello po' } }), { bubble: 'Hi!', greeting: 'Hello po' })
+  assert.deepEqual(textsFromConfig({ texts: { bubble: '  ' } }), { bubble: def, greeting: def })
+  assert.deepEqual(textsFromConfig(null), { bubble: def, greeting: def })
+})

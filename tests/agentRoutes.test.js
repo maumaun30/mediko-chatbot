@@ -24,7 +24,9 @@ const settings = {
   getBusinessHours: async () => saved.hours || { enabled: true },
   saveBusinessHours: async (v) => { saved.hours = v },
   getUnansweredMinutes: async () => saved.mins ?? 10,
-  saveUnansweredMinutes: async (n) => { saved.mins = n }
+  saveUnansweredMinutes: async (n) => { saved.mins = n },
+  getWidgetTexts: async () => saved.texts || {},
+  saveWidgetTexts: async (v) => { saved.texts = Object.fromEntries(Object.entries(v).filter(([, s]) => s.trim())) }
 }
 
 let app
@@ -76,6 +78,21 @@ test('PUT /settings without token -> 401, with token saves', async () => {
   assert.equal(ok.statusCode, 200)
   assert.equal(ok.json().unansweredMinutes, 5)
 })
+test('PUT /settings saves widget texts; blank clears one field only', async () => {
+  let r = await app.inject({ method: 'PUT', url: '/api/agent/settings', headers: auth, payload: { widgetTexts: { bubble: 'Hi!', greeting: 'Hello po' } } })
+  assert.deepEqual(r.json().widgetTexts, { bubble: 'Hi!', greeting: 'Hello po' })
+  r = await app.inject({ method: 'PUT', url: '/api/agent/settings', headers: auth, payload: { widgetTexts: { bubble: '' } } })
+  assert.deepEqual(r.json().widgetTexts, { greeting: 'Hello po' })
+  const bad = await app.inject({ method: 'PUT', url: '/api/agent/settings', headers: auth, payload: { widgetTexts: { bubble: 'x'.repeat(201) } } })
+  assert.equal(bad.statusCode, 400)
+})
+
+test('cleanWidgetTexts keeps non-empty known strings only', async () => {
+  const { cleanWidgetTexts } = await import('../src/services/settingsService.js')
+  assert.deepEqual(cleanWidgetTexts({ bubble: '  Hi ', greeting: '   ', evil: 'x' }), { bubble: 'Hi' })
+  assert.deepEqual(cleanWidgetTexts(null), {})
+})
+
 test('corsOriginFor', () => {
   process.env.ALLOWED_ORIGINS = 'https://store.mediko.ph,https://mediko-gateway.quailshack.com'
   assert.equal(corsOriginFor('https://store.mediko.ph'), 'https://store.mediko.ph')

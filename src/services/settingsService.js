@@ -44,6 +44,24 @@ export async function getUnansweredMinutes() {
 }
 export async function saveUnansweredMinutes(n) { return await setSetting('unanswered_minutes', { value: n }) }
 
+/**
+ * Editable widget copy (Gateway › Templates › Chat). Blank/missing fields mean
+ * "use the widget's built-in default", so only non-empty strings are returned.
+ */
+export async function getWidgetTexts() {
+  return cleanWidgetTexts(await getSetting('widget_texts'))
+}
+export async function saveWidgetTexts(v) { return await setSetting('widget_texts', cleanWidgetTexts(v)) }
+
+export function cleanWidgetTexts(v) {
+  const out = {}
+  for (const k of ['bubble', 'greeting']) {
+    const s = typeof v?.[k] === 'string' ? v[k].trim() : ''
+    if (s) out[k] = s
+  }
+  return out
+}
+
 export async function getAwayMessage() {
   const bh = await getBusinessHours()
   return bh?.awayMessage || 'Pasensya na po, wala kaming available na agent sa ngayon. Subukan ulit mamaya.'
